@@ -501,7 +501,7 @@ local function FillErrorLine(ErrorLine: {{number}}, Width: number)
 	end
 
 	-- create missing arrays
-	for Index = Length, Width do
+	for Index = Length + 1, Width do
 		ErrorLine[Index] = table.create(4, 0.0)
 	end
 end
