@@ -9,7 +9,7 @@
 
 local Future = require(script.Parent.Future)
 
-type QuantizationType = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
+type DitheringMethod = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
 	"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite" | 
 	"ErrorDiffusionRiemersma" | "NearestColor"
 
@@ -66,101 +66,32 @@ type ImageData = {
 	Width: number,
 }
 
--- http:--www.tannerhelland.com/4660/dithering-eleven-algorithms-source-code/
-
-local function CreateRGBArray(R: number, G: number, B: number)
-	local RGBArray = table.create(3)
-	RGBArray[1] = R
-	RGBArray[2] = G
-	RGBArray[3] = B
-	return RGBArray
-end
-
-local DitheringKernels = {
-	FloydSteinberg = {
-		CreateRGBArray(7 / 16, 1, 0),
-		CreateRGBArray(3 / 16, -1, 1),
-		CreateRGBArray(5 / 16, 0, 1),
-		CreateRGBArray(1 / 16, 1, 1)
+-- sRGB (based on ITU-R Recommendation BT.709)
+-- http://en.wikipedia.org/wiki/SRGB
+local BT709 = {
+	Y = {
+		RED = 0.64,
+		GREEN = 0.3,
+		BLUE = 0.15,
+		WHITE = 0.3127,
 	},
-	FalseFloydSteinberg = {
-		CreateRGBArray(3 / 8, 1, 0),
-		CreateRGBArray(3 / 8, 0, 1),
-		CreateRGBArray(2 / 8, 1, 1)
+	x = {
+		RED = 0.64,
+		GREEN = 0.3,
+		BLUE = 0.15,
+		WHITE = 0.3127,
 	},
-	Stucki = {
-		CreateRGBArray(8 / 42, 1, 0),
-		CreateRGBArray(4 / 42, 2, 0),
-		CreateRGBArray(2 / 42, -2, 1),
-		CreateRGBArray(4 / 42, -1, 1),
-		CreateRGBArray(8 / 42, 0, 1),
-		CreateRGBArray(4 / 42, 1, 1),
-		CreateRGBArray(2 / 42, 2, 1),
-		CreateRGBArray(1 / 42, -2, 2),
-		CreateRGBArray(2 / 42, -1, 2),
-		CreateRGBArray(4 / 42, 0, 2),
-		CreateRGBArray(2 / 42, 1, 2),
-		CreateRGBArray(1 / 42, 2, 2)
-	},
-	Atkinson = {
-		CreateRGBArray(1 / 8, 1, 0),
-		CreateRGBArray(1 / 8, 2, 0),
-		CreateRGBArray(1 / 8, -1, 1),
-		CreateRGBArray(1 / 8, 0, 1),
-		CreateRGBArray(1 / 8, 1, 1),
-		CreateRGBArray(1 / 8, 0, 2)
-	},
-	-- Jarvis, Judice, and Ninke / JJN?
-	Jarvis = {
-		CreateRGBArray(7 / 48, 1, 0),
-		CreateRGBArray(5 / 48, 2, 0),
-		CreateRGBArray(3 / 48, -2, 1),
-		CreateRGBArray(5 / 48, -1, 1),
-		CreateRGBArray(7 / 48, 0, 1),
-		CreateRGBArray(5 / 48, 1, 1),
-		CreateRGBArray(3 / 48, 2, 1),
-		CreateRGBArray(1 / 48, -2, 2),
-		CreateRGBArray(3 / 48, -1, 2),
-		CreateRGBArray(5 / 48, 0, 2),
-		CreateRGBArray(3 / 48, 1, 2),
-		CreateRGBArray(1 / 48, 2, 2)
-	},
-	Burkes = {
-		CreateRGBArray(8 / 32, 1, 0),
-		CreateRGBArray(4 / 32, 2, 0),
-		CreateRGBArray(2 / 32, -2, 1),
-		CreateRGBArray(4 / 32, -1, 1),
-		CreateRGBArray(8 / 32, 0, 1),
-		CreateRGBArray(4 / 32, 1, 1),
-		CreateRGBArray(2 / 32, 2, 1),
-	},
-	Sierra = {
-		CreateRGBArray(5 / 32, 1, 0),
-		CreateRGBArray(3 / 32, 2, 0),
-		CreateRGBArray(2 / 32, -2, 1),
-		CreateRGBArray(4 / 32, -1, 1),
-		CreateRGBArray(5 / 32, 0, 1),
-		CreateRGBArray(4 / 32, 1, 1),
-		CreateRGBArray(2 / 32, 2, 1),
-		CreateRGBArray(2 / 32, -1, 2),
-		CreateRGBArray(3 / 32, 0, 2),
-		CreateRGBArray(2 / 32, 1, 2),
-	},
-	TwoSierra = {
-		CreateRGBArray(4 / 16, 1, 0),
-		CreateRGBArray(3 / 16, 2, 0),
-		CreateRGBArray(1 / 16, -2, 1),
-		CreateRGBArray(2 / 16, -1, 1),
-		CreateRGBArray(3 / 16, 0, 1),
-		CreateRGBArray(2 / 16, 1, 1),
-		CreateRGBArray(1 / 16, 2, 1),
-	},
-	SierraLite = {
-		CreateRGBArray(2 / 4, 1, 0),
-		CreateRGBArray(1 / 4, -1, 1),
-		CreateRGBArray(1 / 4, 0, 1),
+	y = {
+		RED = 0.33,
+		GREEN = 0.6,
+		BLUE = 0.06,
+		WHITE = 0.329,
 	},
 }
+
+local function PutWithin0To255(N: number)
+	return math.clamp(N, 0, 255)
+end
 
 -- http://alienryderflex.com/hsp.html
 local function RGBToLum(R: number, G: number, B: number)
@@ -223,9 +154,9 @@ local function ExtractData(Data: {Color3} | EditableImage)
     end
 end
 
--- /////////////////////////////////////////////////////////////////////
--- DISTANCE CALCUATORS
--- /////////////////////////////////////////////////////////////////////
+--------------------------------------------------------------------------------
+-- Distance Calcuator
+--------------------------------------------------------------------------------
 
 local function GetColorDiffrenceChannel(X: number, Y: number, Alphas: number)
     -- maximum of channel blended on white, and blended on black
@@ -388,9 +319,9 @@ local Calcuators: {
     ManhattanBT709 = {
         CalculateRaw = CalcuateRaw_Manhattan,
         Defualts = {
-            KR = Y.RED,
-            KG = Y.GREEN,
-            KB = Y.BLUE,
+            KR = BT709.Y.RED,
+            KG = BT709.Y.GREEN,
+            KB = BT709.Y.BLUE,
             -- TODO: what is the best coefficient below?
             KA = 1,
         },
@@ -463,6 +394,348 @@ local function CreateCalcuator(
     }, CalcuatorPrototype)
     self.MaxDistance = self:CalcuateRaw(R, G, B, A, 0, 0, 0, 0)
     return self :: DistanceCalcuator
+end
+
+--------------------------------------------------------------------------------
+-- Dithering
+--------------------------------------------------------------------------------
+
+ -- http://www.tannerhelland.com/4660/dithering-eleven-algorithms-source-code/
+local ErrorDiffusionArrays = {
+	FloydSteinberg = {
+		{7 / 16, 1, 0},
+		{3 / 16, -1, 1},
+		{5 / 16, 0, 1},
+		{1 / 16, 1, 1}
+	},
+	FalseFloydSteinberg = {
+		{3 / 8, 1, 0},
+		{3 / 8, 0, 1},
+		{2 / 8, 1, 1}
+	},
+	Stucki = {
+		{8 / 42, 1, 0},
+		{4 / 42, 2, 0},
+		{2 / 42, -2, 1},
+		{4 / 42, -1, 1},
+		{8 / 42, 0, 1},
+		{4 / 42, 1, 1},
+		{2 / 42, 2, 1},
+		{1 / 42, -2, 2},
+		{2 / 42, -1, 2},
+		{4 / 42, 0, 2},
+		{2 / 42, 1, 2},
+		{1 / 42, 2, 2}
+	},
+	Atkinson = {
+		{1 / 8, 1, 0},
+		{1 / 8, 2, 0},
+		{1 / 8, -1, 1},
+		{1 / 8, 0, 1},
+		{1 / 8, 1, 1},
+		{1 / 8, 0, 2}
+	},
+	-- Jarvis, Judice, and Ninke / JJN?
+	Jarvis = {
+		{7 / 48, 1, 0},
+		{5 / 48, 2, 0},
+		{3 / 48, -2, 1},
+		{5 / 48, -1, 1},
+		{7 / 48, 0, 1},
+		{5 / 48, 1, 1},
+		{3 / 48, 2, 1},
+		{1 / 48, -2, 2},
+		{3 / 48, -1, 2},
+		{5 / 48, 0, 2},
+		{3 / 48, 1, 2},
+		{1 / 48, 2, 2}
+	},
+	Burkes = {
+		{8 / 32, 1, 0},
+		{4 / 32, 2, 0},
+		{2 / 32, -2, 1},
+		{4 / 32, -1, 1},
+		{8 / 32, 0, 1},
+		{4 / 32, 1, 1},
+		{2 / 32, 2, 1},
+	},
+	Sierra = {
+		{5 / 32, 1, 0},
+		{3 / 32, 2, 0},
+		{2 / 32, -2, 1},
+		{4 / 32, -1, 1},
+		{5 / 32, 0, 1},
+		{4 / 32, 1, 1},
+		{2 / 32, 2, 1},
+		{2 / 32, -1, 2},
+		{3 / 32, 0, 2},
+		{2 / 32, 1, 2},
+	},
+	TwoSierra = {
+		{4 / 16, 1, 0},
+		{3 / 16, 2, 0},
+		{1 / 16, -2, 1},
+		{2 / 16, -1, 1},
+		{3 / 16, 0, 1},
+		{2 / 16, 1, 1},
+		{1 / 16, 2, 1},
+	},
+	SierraLite = {
+		{2 / 4, 1, 0},
+		{1 / 4, -1, 1},
+		{1 / 4, 0, 1},
+	},
+}
+
+local function FillErrorLine(ErrorLine: {{number}}, Width: number)
+	-- shrink
+	local Length = if #ErrorLine > Width then Width else #ErrorLine
+
+	-- reuse existing arrays
+	for Index = 1, Length do
+		local Error = ErrorLine[Index]
+		Error[1] = 0
+		Error[2] = 0
+		Error[3] = 0
+		Error[4] = 0
+	end
+
+	-- create missing arrays
+	for Index = Length, Width do
+		ErrorLine[Index] = table.create(4, 0.0)
+	end
+end
+
+-- adapted from http://jsbin.com/iXofIji/2/edit by PAEz
+-- fixed version. it doesn't use image pixels as error storage, also it doesn't have 0.3 + 0.3 + 0.3 + 0.3 = 0 error
+-- Mutates ImageData
+local function Dither_ErrorDiffusionArray(
+	DistanceCalcuator: DistanceCalcuator,
+	ImageData: ImageData,
+	Palette: Palette,
+	QuantizationType: QuantizationType,
+	Serpentine: boolean?,
+	MinimumColorDistanceToDither: number?,
+	CalculateErrorLikeGIMP: boolean?,
+)
+	local Kernel = ErrorDiffusionArrays[QuantizationType] :: {number}
+	if not Kernel then
+		error(`[Quack] Could not find Error Diffusion Kernel for {QuantizationType}`)
+	end
+
+end
+
+import { ProgressTracker } from '../../utils/progressTracker';
+import { ImageQuantizerYieldValue } from '../imageQuantizerYieldValue';
+
+enum Direction {
+  NONE = 0,
+  UP,
+  LEFT,
+  RIGHT,
+  DOWN,
+}
+
+interface Data {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  level: number;
+  index: number;
+  tracker: ProgressTracker;
+  callback(x: number, y: number): void;
+}
+
+local function CreateHilbertCurve(
+	Width: number,
+	Height: number,
+	Callback: (X: number, Y: number) -> ()
+)
+	local Level = math.floor(math.log(math.max(Width, Height)) / math.log(2) + 1)
+	local Data = {
+		Callback = Callback,
+		Height = Height,
+		Width = Width,
+		Level = Level,
+		Index = 1,
+		X = 0,
+		Y = 0,
+	}
+
+	WalkHilbert(Data, 3)
+	HilbertVisit(Data, 0)
+yield* walkHilbert(data, Direction.UP);
+visit(data, Direction.NONE);
+end
+
+function* walkHilbert(
+  data: Data,
+  direction: Direction,
+): IterableIterator<ImageQuantizerYieldValue> {
+  if (data.level < 1) return;
+
+  if (data.tracker.shouldNotify(data.index)) {
+    yield { progress: data.tracker.progress };
+  }
+  data.level--;
+  switch (direction) {
+    case Direction.LEFT:
+      yield* walkHilbert(data, Direction.UP);
+      visit(data, Direction.RIGHT);
+      yield* walkHilbert(data, Direction.LEFT);
+      visit(data, Direction.DOWN);
+      yield* walkHilbert(data, Direction.LEFT);
+      visit(data, Direction.LEFT);
+      yield* walkHilbert(data, Direction.DOWN);
+      break;
+
+    case Direction.RIGHT:
+      yield* walkHilbert(data, Direction.DOWN);
+      visit(data, Direction.LEFT);
+      yield* walkHilbert(data, Direction.RIGHT);
+      visit(data, Direction.UP);
+      yield* walkHilbert(data, Direction.RIGHT);
+      visit(data, Direction.RIGHT);
+      yield* walkHilbert(data, Direction.UP);
+      break;
+
+    case Direction.UP:
+      yield* walkHilbert(data, Direction.LEFT);
+      visit(data, Direction.DOWN);
+      yield* walkHilbert(data, Direction.UP);
+      visit(data, Direction.RIGHT);
+      yield* walkHilbert(data, Direction.UP);
+      visit(data, Direction.UP);
+      yield* walkHilbert(data, Direction.RIGHT);
+      break;
+
+    case Direction.DOWN:
+      yield* walkHilbert(data, Direction.RIGHT);
+      visit(data, Direction.UP);
+      yield* walkHilbert(data, Direction.DOWN);
+      visit(data, Direction.LEFT);
+      yield* walkHilbert(data, Direction.DOWN);
+      visit(data, Direction.DOWN);
+      yield* walkHilbert(data, Direction.LEFT);
+      break;
+
+    default:
+      break;
+  }
+  data.level++;
+}
+
+function visit(data: Data, direction: Direction) {
+  if (
+    data.x >= 0 &&
+    data.x < data.width &&
+    data.y >= 0 &&
+    data.y < data.height
+  ) {
+    data.callback(data.x, data.y);
+    data.index++;
+  }
+  switch (direction) {
+    case Direction.LEFT:
+      data.x--;
+      break;
+    case Direction.RIGHT:
+      data.x++;
+      break;
+    case Direction.UP:
+      data.y--;
+      break;
+    case Direction.DOWN:
+      data.y++;
+      break;
+  }
+}
+
+local function Dither_ErrorDiffusionRiemersma(
+	DistanceCalcuator: DistanceCalcuator,
+	ImageData: ImageData,
+	Palette: Palette,
+	ErrorPropagation: number?,
+	ErrorQueueSize: number?,
+)
+	local ErrorPropagation = ErrorPropagation or 1	
+	local ErrorQueueSize = ErrorQueueSize or 16
+
+	local Multiplier = math.exp(math.log(ErrorQueueSize) / (ErrorQueueSize - 1))
+	local pointArray = pointContainer.getPointArray();
+	local ErrorQueue = table.create(ErrorQueueSize)
+	local Weights = table.create(ErrorQueueSize)
+	local Height = ImageData.Height
+	local Width = ImageData.Width
+	local Head = 0
+	local Next = 1
+
+	for Index = 1, ErrorQueueSize do
+		Weights[Index] = (bit32.bor(Next + 0.5, 0) / ErrorQueueSize) * ErrorPropagation
+		ErrorQueue[Index] = table.create(4, 0)
+		Next *= Multiplier
+	end
+
+	yield* hilbertCurve(width, height, (x, y) => {
+	  const p = pointArray[x + y * width];
+	  let { r, g, b, a } = p;
+	  for (let i = 0; i < this._errorQueueSize; i++) {
+		const weight = this._weights[i];
+		const e = errorQueue[(i + head) % this._errorQueueSize];
+
+		r += e.r * weight;
+		g += e.g * weight;
+		b += e.b * weight;
+		a += e.a * weight;
+	  }
+
+	  const correctedPoint = Point.createByRGBA(
+		inRange0to255Rounded(r),
+		inRange0to255Rounded(g),
+		inRange0to255Rounded(b),
+		inRange0to255Rounded(a),
+	  );
+
+	  const quantizedPoint = palette.getNearestColor(
+		this._distance,
+		correctedPoint,
+	  );
+
+	  // update head and calculate tail
+	  head = (head + 1) % this._errorQueueSize;
+	  const tail = (head + this._errorQueueSize - 1) % this._errorQueueSize;
+
+	  // update error with new value
+	  errorQueue[tail].r = p.r - quantizedPoint.r;
+	  errorQueue[tail].g = p.g - quantizedPoint.g;
+	  errorQueue[tail].b = p.b - quantizedPoint.b;
+	  errorQueue[tail].a = p.a - quantizedPoint.a;
+
+	  // update point
+	  p.from(quantizedPoint);
+	});
+end
+ 
+ -- PointContainer is replaced w image data, a simple struct
+local function Dither_NearestColor(
+	DistanceCalcuator: DistanceCalcuator,
+	ImageData: ImageData,
+	Palette: Palette,
+)
+	local pointArray = pointContainer.getPointArray();
+	local width = pointContainer.getWidth();
+	local height = pointContainer.getHeight();
+
+	for Y = 0, Height do
+		for X = 0, Y * Width do
+			if X < Width then break end
+			-- Image pixel
+			local point = pointArray[idx];
+			-- Reduced pixel
+			point.from(palette.getNearestColor(this._distance, point));
+		end
+	end
 end
 
 local QuantizerPrototype = {}
@@ -1160,6 +1433,7 @@ end
 local Image1 = Quant.ExtractData(EditableImage)
 local Image2 = Quack.ExtractData(EditableImage)
 local Image3 = Quack.ExtractData(EditableImage)
+Quack.ExtractDataFor(EditableImage1, EditableImage2, EditableImage3)
 
 local Palette = Quack.PalletizeAsync(table.pack(Image1, Image2, Image3), {
 	DitheringMethod = "FloydSteinberg",
