@@ -495,6 +495,12 @@ local ErrorDiffusionArrays = {
 	},
 }
 
+local HilbertRight = 3
+local HilbertDown = 4
+local HilbertNone = 0
+local HilbertLeft = 2
+local HilbertUp = 1
+
 local function FillErrorLine(ErrorLine: {{number}}, Width: number)
 	-- shrink
 	local Length = if #ErrorLine > Width then Width else #ErrorLine
@@ -528,18 +534,12 @@ local function Dither_ErrorDiffusionArray(
 	MinimumColorDistanceToDither: number?,
 	CalculateErrorLikeGIMP: boolean?,
 )
-	local Kernel = ErrorDiffusionArrays[DitheringMethod] :: {number}
+	local Kernel = ErrorDiffusionArrays[DitheringMethod] :: {{number}}
 	if not Kernel then
 		error(`[Quack] Could not find Error Diffusion Kernel for {DitheringMethod}`)
 	end
 
 end
-
-local HilbertRight = 3
-local HilbertDown = 4
-local HilbertNone = 0
-local HilbertLeft = 2
-local HilbertUp = 1
 
 local HilbertCurvePrototype = {}
 HilbertCurvePrototype.__index = HilbertCurvePrototype
