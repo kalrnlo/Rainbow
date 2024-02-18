@@ -79,7 +79,6 @@ type HilbertCurve = {
 	Callback: (X: number, Y: number) -> (),
 	Height: number,
 	Width: number,
-	Index: number,
 	Level: number,
 	X: number,
 	Y: number,
@@ -690,7 +689,6 @@ function HilbertCurvePrototype.Visit(self: HilbertCurve, Direction: number)
 		self.Y >= 0 and self.Y < self.Height 
 	then
 		self.Callback(self.X, self.Y)
-		self.Index +=  1
 	end
 	
 	if Direction == HilbertLeft then
@@ -815,7 +813,6 @@ local function Dither_ErrorDiffusionRiemersma(
 		Level = math.floor(math.log(math.max(Width, Height)) / math.log(2) + 1),
 		Height = Height,
 		Width = Width,
-		Index = 1,
 		X = 0,
 		Y = 0,
 	}, HilbertCurvePrototype) :: any
