@@ -7,6 +7,29 @@
 -- @Kalrnlo
 -- 17/02/2024
 
+--[[
+local Image1 = Quant.ExtractData(EditableImage)
+local Image2 = Quack.ExtractData(EditableImage)
+local Image3 = Quack.ExtractData(EditableImage)
+Quack.ExtractDataFor(EditableImage1, EditableImage2, EditableImage3)
+
+local Palette = Quack.PalletizeAsync(table.pack(Image1, Image2, Image3), {
+	DitheringMethod = "FloydSteinberg",
+	DistanceFormula = "Manhattan",
+	Method = "GlobalPopulation",
+	Colors = 256
+}):Await()
+
+local Palette = Quack.Palletize(Image, {
+	DitheringMethod = "FloydSteinberg",
+	DistanceFormula = "Manhattan",
+	Method = "GlobalPopulation",
+	Colors = 256
+})
+
+Quack.Dither("FloydSteinberg", Image)
+--]]
+
 local Future = require(script.Parent.Future)
 
 type DitheringMethod = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
@@ -45,6 +68,10 @@ type PalettePrototype = {
     __tostring: (self: PalettePrototype) -> string,
 	__len: (self: PalettePrototype) -> number,
 }
+
+type Palette = typeof(setmetatable({} :: {
+
+}, {} :: PalettePrototype))
 
 type HilbertCurve = {
 	Visit: (self: HilbertCurve, Direction: number) -> (),
@@ -409,7 +436,7 @@ end
 --------------------------------------------------------------------------------
 
  -- http://www.tannerhelland.com/4660/dithering-eleven-algorithms-source-code/
-local ErrorDiffusionArrays = {
+local ErrorDiffusionArrays: {[DitheringMethod]: {{number}}} = {
 	FloydSteinberg = {
 		{7 / 16, 1, 0},
 		{3 / 16, -1, 1},
@@ -683,8 +710,8 @@ local function Dither_ErrorDiffusionRiemersma(
 	HilbertCurve:Walk(HilbertUp)
 	HilbertCurve:Visit(0)
 end
- 
- -- PointContainer is replaced w image data, a simple struct
+
+-- PointContainer is replaced w image data, a simple struct
 local function Dither_NearestColor(
 	DistanceCalcuator: DistanceCalcuator,
 	ImageData: ImageData,
