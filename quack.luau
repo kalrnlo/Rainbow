@@ -63,14 +63,14 @@ type DistanceFormulaDefaults = {
 }
 
 type PalettePrototype = {
-
+	Nearest: (self: PalettePrototype)
     -- tostring(Palette) returns the first color in the palette as a hex color string
     __tostring: (self: PalettePrototype) -> string,
 	__len: (self: PalettePrototype) -> number,
 }
 
 type Palette = typeof(setmetatable({} :: {
-
+	Colors: {}
 }, {} :: PalettePrototype))
 
 type HilbertCurve = {
