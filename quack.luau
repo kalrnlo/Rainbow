@@ -306,14 +306,13 @@ local function CalcuateRaw_CMetric(
     A2: number,
 )
     local rmean = ((R1 + R2) / 2) * self.WhitepointR
+    local dA = (A2 - A1) * self.WhitepointA
     local r = (R1 - R2) * self.WhitepointR
     local g = (G1 - G2) * self.WhitepointG
     local b = (B1 - B2) * self.WhitepointB
-    local dA = (A2 - A1) * self.WhitepointA
-    local dE =
-        (bit32.rshift((((512 + rmean) * r) * r), 8)) +
-        (bit32.rshift((((767 - rmean) * b) * b), 8)) +
-        ((4 * g) * g)
+    local dE = ((4 * g) * g) + 
+	bit32.rshift((((512 + rmean) * r) * r), 8) +
+        bit32.rshift((((767 - rmean) * b) * b), 8)
 
     return math.sqrt((dE + dA) * dA)
 end
@@ -377,11 +376,11 @@ local Calcuators: {
     },
     PNGQuant = {
         CalcuateRaw = CalcuateRaw_PNGQuant,
-        Defualts = table.create(1) :: any,
+        Defualts = {} :: any,
     },
     CMetric = {
         CalculateRaw = CalcuateRaw_CMetric,
-        Defualts = table.create(1) :: any,
+        Defualts = {} :: any,
     },
 }
 
@@ -853,4 +852,3 @@ local function Dither_NearestColor(
 		end
 	end
 end
-
