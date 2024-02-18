@@ -60,6 +60,24 @@ type DistanceCalcuator = typeof(setmetatable({} :: {
     WhitepointA: number,
 }, {} :: CalcuatorPrototype))
 
+type HilbertCurve = {
+	Visit: (self: HilbertCurve, Direction: number) -> (),
+	Walk: (self: HilbertCurve, Direction: number) -> (),
+	RIGHT: number,
+	DOWN: number,
+	LEFT: number,
+	NONE: number,
+	UP: number,
+
+	Callback: (X: number, Y: number) -> (),
+	Height: number,
+	Width: number,
+	Index: number,
+	Level: number,
+	X: number,
+	Y: number,
+}
+
 type ImageData = {
 	Pixels: buffer,
 	Height: number,
@@ -525,132 +543,93 @@ local function Dither_ErrorDiffusionArray(
 
 end
 
-import { ProgressTracker } from '../../utils/progressTracker';
-import { ImageQuantizerYieldValue } from '../imageQuantizerYieldValue';
-
-enum Direction {
-  NONE = 0,
-  UP,
-  LEFT,
-  RIGHT,
-  DOWN,
+local HilbertCurvePrototype = {
+	RIGHT = 3,
+	LEFT = 2,
+	DOWN = 4,
+	NONE = 0,
+	UP = 1,
 }
+HilbertCurvePrototype.__index = HilbertCurvePrototype
 
-interface Data {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  level: number;
-  index: number;
-  tracker: ProgressTracker;
-  callback(x: number, y: number): void;
-}
+function HilbertCurvePrototype.Visit(self: HilbertCurve, Direction: number)
+	if 
+		self.X >= 0 and self.X < self.Width and 
+		self.Y >= 0 and self.Y < self.Height 
+	then
+		self.Callback(self.X, self.Y)
+		self.Index +=  1
+	end
+	
+	if Direction == self.LEFT then
+		self.X -= 1
+	elseif Direction == self.RIGHT then
+		self.X += 1
+	elseif Direction == self.UP then
+		self.Y -= 1
+	elseif Direction == self.DOWN then
+		self.Y += 1
+	end
+end
+
+function HilbertCurvePrototype.Walk(self: HilbertCurve, Direction: number)
+	if self.Level < 1 then return end
+	self.Level -= 1
+	
+	if Direction == self.LEFT then
+		self:Walk(self.UP)
+		self:Visit(self.RIGHT)
+		self:Walk(self.LEFT)
+		self:Visit(self.DOWN)
+		self:Walk(self.LEFT)
+		self:Visit(self.LEFT)
+		self:Walk(self.DOWN)
+	elseif Direction == self.RIGHT then
+		self:Walk(self.DOWN)
+		self:Visit(self.LEFT)
+		self:Walk(self.RIGHT)
+		self:Visit(self.UP)
+		self:Walk(self.RIGHT)
+		self:Visit(self.RIGHT)
+		self:Walk(self.UP)
+	elseif Direction == self.UP then
+		self:Walk(self.LEFT)
+		self:Visit(self.DOWN)
+		self:Walk(self.UP)
+		self:Visit(self.RIGHT)
+		self:Walk(self.UP)
+		self:Visit(self.UP)
+		self:Walk(self.RIGHT)
+	elseif Direction == self.DOWN then
+		self:Walk(self.RIGHT)
+		self:Visit(self.UP)
+		self:Walk(self.DOWN)
+		self:Visit(self.LEFT)
+		self:Walk(self.DOWN)
+		self:Visit(self.DOWN)
+		self:Walk(self.LEFT)
+	end
+	self.Level += 1
+end
 
 local function CreateHilbertCurve(
 	Width: number,
 	Height: number,
 	Callback: (X: number, Y: number) -> ()
 )
-	local Level = math.floor(math.log(math.max(Width, Height)) / math.log(2) + 1)
-	local Data = {
+	local self: HilbertCurve = setmetatable({
+		Level = math.floor(math.log(math.max(Width, Height)) / math.log(2) + 1),
 		Callback = Callback,
 		Height = Height,
 		Width = Width,
-		Level = Level,
 		Index = 1,
 		X = 0,
 		Y = 0,
-	}
+	}, HilbertCurvePrototype) :: any
 
-	WalkHilbert(Data, 3)
-	HilbertVisit(Data, 0)
-yield* walkHilbert(data, Direction.UP);
-visit(data, Direction.NONE);
+	self:Walk(self.UP)
+	self:Visit(self.NONE)
 end
-
-function* walkHilbert(
-  data: Data,
-  direction: Direction,
-): IterableIterator<ImageQuantizerYieldValue> {
-  if (data.level < 1) return;
-
-  if (data.tracker.shouldNotify(data.index)) {
-    yield { progress: data.tracker.progress };
-  }
-  data.level--;
-  switch (direction) {
-    case Direction.LEFT:
-      yield* walkHilbert(data, Direction.UP);
-      visit(data, Direction.RIGHT);
-      yield* walkHilbert(data, Direction.LEFT);
-      visit(data, Direction.DOWN);
-      yield* walkHilbert(data, Direction.LEFT);
-      visit(data, Direction.LEFT);
-      yield* walkHilbert(data, Direction.DOWN);
-      break;
-
-    case Direction.RIGHT:
-      yield* walkHilbert(data, Direction.DOWN);
-      visit(data, Direction.LEFT);
-      yield* walkHilbert(data, Direction.RIGHT);
-      visit(data, Direction.UP);
-      yield* walkHilbert(data, Direction.RIGHT);
-      visit(data, Direction.RIGHT);
-      yield* walkHilbert(data, Direction.UP);
-      break;
-
-    case Direction.UP:
-      yield* walkHilbert(data, Direction.LEFT);
-      visit(data, Direction.DOWN);
-      yield* walkHilbert(data, Direction.UP);
-      visit(data, Direction.RIGHT);
-      yield* walkHilbert(data, Direction.UP);
-      visit(data, Direction.UP);
-      yield* walkHilbert(data, Direction.RIGHT);
-      break;
-
-    case Direction.DOWN:
-      yield* walkHilbert(data, Direction.RIGHT);
-      visit(data, Direction.UP);
-      yield* walkHilbert(data, Direction.DOWN);
-      visit(data, Direction.LEFT);
-      yield* walkHilbert(data, Direction.DOWN);
-      visit(data, Direction.DOWN);
-      yield* walkHilbert(data, Direction.LEFT);
-      break;
-
-    default:
-      break;
-  }
-  data.level++;
-}
-
-function visit(data: Data, direction: Direction) {
-  if (
-    data.x >= 0 &&
-    data.x < data.width &&
-    data.y >= 0 &&
-    data.y < data.height
-  ) {
-    data.callback(data.x, data.y);
-    data.index++;
-  }
-  switch (direction) {
-    case Direction.LEFT:
-      data.x--;
-      break;
-    case Direction.RIGHT:
-      data.x++;
-      break;
-    case Direction.UP:
-      data.y--;
-      break;
-    case Direction.DOWN:
-      data.y++;
-      break;
-  }
-}
 
 local function Dither_ErrorDiffusionRiemersma(
 	DistanceCalcuator: DistanceCalcuator,
@@ -677,44 +656,47 @@ local function Dither_ErrorDiffusionRiemersma(
 		Next *= Multiplier
 	end
 
-	yield* hilbertCurve(width, height, (x, y) => {
-	  const p = pointArray[x + y * width];
-	  let { r, g, b, a } = p;
-	  for (let i = 0; i < this._errorQueueSize; i++) {
-		const weight = this._weights[i];
-		const e = errorQueue[(i + head) % this._errorQueueSize];
+	HilbertCurve(Width, Height, function(X, Y)
+		local P = pointArray[(X + Y) * Width]
+		local R = P[1]
+		local G = P[2]
+		local B = P[3]
+		local A = P[4]
 
-		r += e.r * weight;
-		g += e.g * weight;
-		b += e.b * weight;
-		a += e.a * weight;
-	  }
+		for Index, Weight in Weights do
+			local Error = ErrorQueue[(Index + Head) % ErrorQueueSize]
 
-	  const correctedPoint = Point.createByRGBA(
-		inRange0to255Rounded(r),
-		inRange0to255Rounded(g),
-		inRange0to255Rounded(b),
-		inRange0to255Rounded(a),
-	  );
-
-	  const quantizedPoint = palette.getNearestColor(
-		this._distance,
-		correctedPoint,
-	  );
-
-	  // update head and calculate tail
-	  head = (head + 1) % this._errorQueueSize;
-	  const tail = (head + this._errorQueueSize - 1) % this._errorQueueSize;
-
-	  // update error with new value
-	  errorQueue[tail].r = p.r - quantizedPoint.r;
-	  errorQueue[tail].g = p.g - quantizedPoint.g;
-	  errorQueue[tail].b = p.b - quantizedPoint.b;
-	  errorQueue[tail].a = p.a - quantizedPoint.a;
-
-	  // update point
-	  p.from(quantizedPoint);
-	});
+			R += Error[1] * Weight
+			G += Error[2] * Weight
+			B += Error[3] * Weight
+			A += Error[4] * Weight
+		end
+		-- QuantizedPoint
+		local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
+			self.Distance,
+			math.clamp(R, 0, 255),
+			math.clamp(G, 0, 255),
+			math.clamp(B, 0, 255),
+			math.clamp(A, 0, 255)
+		)
+	
+		-- update head and calculate tail
+		Head = (Head + 1) % ErrorQueueSize
+		local Tail = ((Head + ErrorQueueSize) - 1) % ErrorQueueSize
+	
+		-- update error with new value
+		ErrorQueue[Tail][1] = R - QuantizedR
+		ErrorQueue[Tail][2] = G - QuantizedG
+		ErrorQueue[Tail][3] = B - QuantizedB
+		ErrorQueue[Tail][4] = A - QuantizedA
+	
+		-- update point
+		--p.from(quantizedPoint);
+		P[1] = QuantizedR
+		P[2] = QuantizedG
+		P[3] = QuantizedB
+		P[4] = QuantizedA
+	end)
 end
  
  -- PointContainer is replaced w image data, a simple struct
@@ -724,16 +706,25 @@ local function Dither_NearestColor(
 	Palette: Palette,
 )
 	local pointArray = pointContainer.getPointArray();
-	local width = pointContainer.getWidth();
-	local height = pointContainer.getHeight();
 
-	for Y = 0, Height do
-		for X = 0, Y * Width do
-			if X < Width then break end
+	for Y = 1, ImageData.Height do
+		local Index = Y * ImageData.Width
+
+		for X = 1, ImageData.Width do
 			-- Image pixel
-			local point = pointArray[idx];
+			local Point = pointArray[Index]
+
 			-- Reduced pixel
-			point.from(palette.getNearestColor(this._distance, point));
+			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
+				self.Distance,
+				table.unpack(Point)
+			)
+
+			Point[1] = QuantizedR
+			Point[2] = QuantizedG
+			Point[3] = QuantizedB
+			Point[4] = QuantizedA
+			Index += 1
 		end
 	end
 end
