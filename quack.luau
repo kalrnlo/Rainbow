@@ -415,7 +415,7 @@ local function CreateCalcuator(
 )
     local Calcuator = Calcuators[DistanceFormula]
     if not Calcuator then
-        error(`[Quack] No distance calcuator exists for {DistanceFormula}`, 3)
+        error(`[Quack] No distance calcuator exists for {DistanceFormula}`, 2)
     end
 
     local self = setmetatable({
@@ -592,92 +592,99 @@ local function Dither_ErrorDiffusionArray(
 		if Serpentine then
 			Dir *= -1
 		end
+		local lni = Y * Width
+		local XStart = if Dir == 1 then 0 else Width - 1
+		local XEnd = if Dir == 1 then Width else -1
 
+		-- cyclic shift with erasing
+		FillErrorLine(ErrorLines[1], Width)
+		table.insert(ErrorLines, table.remove(ErrorLines, 1) :: any)
+		local ErrorLine = ErrorLines[1]
+		local Index = lni + XStart
+
+		for X = XStart, XEnd do
+			-- Image pixel
+			local Point = pointArray[idx];
+			local Error = ErrorLine[X]
+
+			OriginalR = Point[1]
+			OriginalG = Point[2]
+			OriginalB = Point[3]
+			OriginalA = Point[4]
+
+			local CorrectedR = OriginalR + Error[1]
+			local CorrectedG = OriginalG + Error[2]
+			local CorrectedB = OriginalB + Error[3]
+			local CorrectedA = OriginalA + Error[4]
+
+			-- Reduced pixel
+			local PaletteR, PaletteG, PaletteB, PaletteA = Palette:NearestColor(
+				DistanceCalcuator,
+				CorrectedR,
+				CorrectedG,
+				CorrectedB,
+				CorrectedA
+			)
+			Point[1] = PaletteR
+			Point[2] = PaletteG
+			Point[3] = PaletteB
+			Point[4] = PaletteA
+
+			-- dithering strength
+			if MinimumColorDistanceToDither then 
+				local Distance = DistanceCalcuator:CalcuateNormalized(
+					OriginalR,
+					OriginalG,
+					OriginalB,
+					OriginalA,
+					PaletteR,
+					PaletteG,
+					PaletteB,
+					PaletteA
+				)
+				if Distance < MinimumColorDistanceToDither then continue end
+			end
+
+			local ER
+			local EG
+			local EB
+			local EA
+
+			if CalculateErrorLikeGIMP then
+				ER = CorrectedR - PaletteR
+				EG = CorrectedG - PaletteG
+				EB = CorrectedB - PaletteB
+				EA = CorrectedA - PaletteA
+			else
+				ER = OriginalR - PaletteR
+				EG = OriginalG - PaletteG
+				EB = OriginalB - PaletteB
+				EA = OriginalA - PaletteA
+			end
+
+			local DStart = if Dir == 1 then 0 else #Kernels - 1
+			local DEnd = if Dir == 1 then #Kernels else -1
+
+			for I = DStart, DEnd, Dir do
+				local X1 = Kernels[I][2] * Dir
+				local Y1 = Kernels[I][3]
+	  
+				if 
+					X1 + X >= 0 and X1 + X < Width and
+					Y1 + Y >= 0 and Y1 + Y < Height
+				then
+					local E = ErrorLines[Y1][X1 + X]
+					local D = Kernels[I][1]
+					
+					E[1] += ER * D
+					E[2] += EG * D
+					E[3] += EB * D
+					E[4] += EA * D
+				end
+			end
+			Index += Dir
+		end
 	end
-
-    for (let y = 0; y < height; y++) {
-
-      const lni = y * width;
-      const xStart = dir === 1 ? 0 : width - 1;
-      const xEnd = dir === 1 ? width : -1;
-
-	-- cyclic shift with erasing
-      this._fillErrorLine(errorLines[0], width);
-      -- TODO: why it is needed to cast types here?
-      errorLines.push(errorLines.shift() as number[][]);
-
-      const errorLine = errorLines[0];
-      for (
-        let x = xStart, idx = lni + xStart;
-        x !== xEnd;
-        x += dir, idx += dir
-      ) {
-        // Image pixel
-        const point = pointArray[idx];
-        // originalPoint = new Utils.Point(),
-        const error = errorLine[x];
-
-        originalPoint.from(point);
-
-        const correctedPoint = Point.createByRGBA(
-          inRange0to255Rounded(point.r + error[0]),
-          inRange0to255Rounded(point.g + error[1]),
-          inRange0to255Rounded(point.b + error[2]),
-          inRange0to255Rounded(point.a + error[3]),
-        );
-
-        // Reduced pixel
-        const palettePoint = palette.getNearestColor(
-          this._distance,
-          correctedPoint,
-        );
-        point.from(palettePoint);
-
-        // dithering strength
-        if (this._minColorDistance) {
-          const dist = this._distance.calculateNormalized(
-            originalPoint,
-            palettePoint,
-          );
-          if (dist < this._minColorDistance) continue;
-        }
-
-        // Component distance
-        let er;
-        let eg;
-        let eb;
-        let ea;
-        if (this._calculateErrorLikeGIMP) {
-          er = correctedPoint.r - palettePoint.r;
-          eg = correctedPoint.g - palettePoint.g;
-          eb = correctedPoint.b - palettePoint.b;
-          ea = correctedPoint.a - palettePoint.a;
-        } else {
-          er = originalPoint.r - palettePoint.r;
-          eg = originalPoint.g - palettePoint.g;
-          eb = originalPoint.b - palettePoint.b;
-          ea = originalPoint.a - palettePoint.a;
-        }
-
-        const dStart = dir === 1 ? 0 : this._kernel.length - 1;
-        const dEnd = dir === 1 ? this._kernel.length : -1;
-
-        for (let i = dStart; i !== dEnd; i += dir) {
-          const x1 = this._kernel[i][1] * dir;
-          const y1 = this._kernel[i][2];
-
-          if (x1 + x >= 0 && x1 + x < width && y1 + y >= 0 && y1 + y < height) {
-            const d = this._kernel[i][0];
-            const e = errorLines[y1][x1 + x];
-
-            e[0] += er * d;
-            e[1] += eg * d;
-            e[2] += eb * d;
-            e[3] += ea * d;
-          }
-        }
-      }
-    }
 end
 
 local HilbertCurvePrototype = {}
