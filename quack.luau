@@ -287,17 +287,10 @@ local function CalcuateRaw_Euclidean(
     local dB = B2 - B1;
     local dA = A2 - A1;
     return math.sqrt(
-<<<<<<< HEAD
         ((self.Defaults.KR * dR) * dR) +
         ((self.Defaults.KG * dG) * dG) +
         ((self.Defaults.KB * dB) * dB) +
-        ((self.Defaults.KA * dA) * dA),
-=======
-        (self.Defaults.KR * dR * dR) +
-        (self.Defaults.KG * dG * dG) +
-        (self.Defaults.KB * dB * dB) +
-        (self.Defaults.KA * dA * dA)
->>>>>>> c6fdcbd1a0daa30037ae048618bf6fe71c47ffe4
+        ((self.Defaults.KA * dA) * dA)
     )
 end
 
