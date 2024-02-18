@@ -163,7 +163,7 @@ local function ExtractData(Data: {Color3} | EditableImage)
 end
 
 --------------------------------------------------------------------------------
--- Distance Calcuator
+-- Distance
 --------------------------------------------------------------------------------
 
 local function GetColorDiffrenceChannel(X: number, Y: number, Alphas: number)
