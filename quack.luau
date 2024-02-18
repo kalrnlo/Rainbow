@@ -533,12 +533,14 @@ local function FillErrorLine(ErrorLine: {{number}}, Width: number)
 	local Length = if #ErrorLine > Width then Width else #ErrorLine
 
 	-- reuse existing arrays
-	for Index = 1, Length do
-		local Error = ErrorLine[Index]
-		Error[1] = 0
-		Error[2] = 0
-		Error[3] = 0
-		Error[4] = 0
+	if #ErrorLine ~= 0 then
+		for Index = 1, Length do
+			local Error = ErrorLine[Index]
+			Error[1] = 0
+			Error[2] = 0
+			Error[3] = 0
+			Error[4] = 0
+		end
 	end
 
 	-- create missing arrays
