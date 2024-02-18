@@ -542,11 +542,10 @@ local function FillErrorLine(ErrorLine: {{number}}, Width: number)
 	end
 
 	-- create missing arrays
-	if Length ~= Width then
-		for Index = Length + 1, Width do
-			ErrorLine[Index] = table.create(4, 0.0)
-		end
+	for Index = Length + 1, Width do
+		ErrorLine[Index] = table.create(4, 0.0)
 	end
+	return ErrorLine
 end
 
 -- adapted from http://jsbin.com/iXofIji/2/edit by PAEz
@@ -561,11 +560,123 @@ local function Dither_ErrorDiffusionArray(
 	MinimumColorDistanceToDither: number?,
 	CalculateErrorLikeGIMP: boolean?,
 )
-	local Kernel = ErrorDiffusionArrays[DitheringMethod] :: {{number}}
-	if not Kernel then
+	local Kernels = ErrorDiffusionArrays[DitheringMethod] :: {{number}}
+	if not Kernels then
 		error(`[Quack] Could not find Error Diffusion Kernel for {DitheringMethod}`)
 	end
 
+	local Height = ImageData.Height
+	local Width = ImageData.Width
+	local MaxErrorLines = 1
+	local OriginalR
+	local OriginalG
+	local OriginalB
+	local OriginalA
+
+	for _, Kernel in Kernels do
+		local KernelErrorLines = Kernel[3] + 1
+		
+		if KernelErrorLines > MaxErrorLines then
+			MaxErrorLines = KernelErrorLines
+		end
+	end
+	local ErrorLines = table.create(MaxErrorLines)
+	local Dir = 1
+
+	for Index = 1, MaxErrorLines do
+		ErrorLines[Index] = FillErrorLine({}, Width)
+	end
+
+	for Y = 1, Height do
+		if Serpentine then
+			Dir *= -1
+		end
+
+	end
+
+    for (let y = 0; y < height; y++) {
+
+      const lni = y * width;
+      const xStart = dir === 1 ? 0 : width - 1;
+      const xEnd = dir === 1 ? width : -1;
+
+	-- cyclic shift with erasing
+      this._fillErrorLine(errorLines[0], width);
+      -- TODO: why it is needed to cast types here?
+      errorLines.push(errorLines.shift() as number[][]);
+
+      const errorLine = errorLines[0];
+      for (
+        let x = xStart, idx = lni + xStart;
+        x !== xEnd;
+        x += dir, idx += dir
+      ) {
+        // Image pixel
+        const point = pointArray[idx];
+        // originalPoint = new Utils.Point(),
+        const error = errorLine[x];
+
+        originalPoint.from(point);
+
+        const correctedPoint = Point.createByRGBA(
+          inRange0to255Rounded(point.r + error[0]),
+          inRange0to255Rounded(point.g + error[1]),
+          inRange0to255Rounded(point.b + error[2]),
+          inRange0to255Rounded(point.a + error[3]),
+        );
+
+        // Reduced pixel
+        const palettePoint = palette.getNearestColor(
+          this._distance,
+          correctedPoint,
+        );
+        point.from(palettePoint);
+
+        // dithering strength
+        if (this._minColorDistance) {
+          const dist = this._distance.calculateNormalized(
+            originalPoint,
+            palettePoint,
+          );
+          if (dist < this._minColorDistance) continue;
+        }
+
+        // Component distance
+        let er;
+        let eg;
+        let eb;
+        let ea;
+        if (this._calculateErrorLikeGIMP) {
+          er = correctedPoint.r - palettePoint.r;
+          eg = correctedPoint.g - palettePoint.g;
+          eb = correctedPoint.b - palettePoint.b;
+          ea = correctedPoint.a - palettePoint.a;
+        } else {
+          er = originalPoint.r - palettePoint.r;
+          eg = originalPoint.g - palettePoint.g;
+          eb = originalPoint.b - palettePoint.b;
+          ea = originalPoint.a - palettePoint.a;
+        }
+
+        const dStart = dir === 1 ? 0 : this._kernel.length - 1;
+        const dEnd = dir === 1 ? this._kernel.length : -1;
+
+        for (let i = dStart; i !== dEnd; i += dir) {
+          const x1 = this._kernel[i][1] * dir;
+          const y1 = this._kernel[i][2];
+
+          if (x1 + x >= 0 && x1 + x < width && y1 + y >= 0 && y1 + y < height) {
+            const d = this._kernel[i][0];
+            const e = errorLines[y1][x1 + x];
+
+            e[0] += er * d;
+            e[1] += eg * d;
+            e[2] += eb * d;
+            e[3] += ea * d;
+          }
+        }
+      }
+    }
 end
 
 local HilbertCurvePrototype = {}
