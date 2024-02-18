@@ -357,9 +357,9 @@ local Calcuators: {
     EuclideanBT709 = {
         CalculateRaw = CalcuateRaw_Euclidean,
         Defualts = {
-            KR = 1,
-            KG = 1,
-            KB = 1,
+			KR = BT709.Y.RED,
+            KG = BT709.Y.GREEN,
+            KB = BT709.Y.BLUE,
             KA = 1,
         },
     },
