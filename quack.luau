@@ -294,7 +294,7 @@ local function CalcuateRaw_Euclidean(
         (self.Defaults.KR * dR * dR) +
         (self.Defaults.KG * dG * dG) +
         (self.Defaults.KB * dB * dB) +
-        (self.Defaults.KA * dA * dA),
+        (self.Defaults.KA * dA * dA)
     )
 end
 
