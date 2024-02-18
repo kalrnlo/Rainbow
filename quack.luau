@@ -674,7 +674,7 @@ local function Dither_ErrorDiffusionRiemersma(
 			end
 			-- QuantizedPoint
 			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
-				self.Distance,
+				DistanceCalcuator,
 				math.clamp(R, 0, 255),
 				math.clamp(G, 0, 255),
 				math.clamp(B, 0, 255),
@@ -728,7 +728,7 @@ local function Dither_NearestColor(
 
 			-- Reduced pixel
 			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
-				self.Distance,
+				DistanceCalcuator,
 				table.unpack(Point)
 			)
 
