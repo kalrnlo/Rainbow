@@ -41,34 +41,14 @@ type DistanceFormulaDefaults = {
 
 type PalettePrototype = {
 
-    -- returns the first color in the palette as a hex
+    -- tostring(Palette) returns the first color in the palette as a hex color string
     __tostring: (self: PalettePrototype) -> string,
-    __index: PalettePrototype,
+	__len: (self: PalettePrototype) -> number,
 }
-
-type CalcuatorPrototype = {
-    CalcuateNormalized: CalcuatorFunction,
-    __index: CalcuatorPrototype,
-}
-
-type DistanceCalcuator = typeof(setmetatable({} :: {
-    Defualts: DistanceFormulaDefaults,
-    CalculateRaw: CalcuatorFunction,
-    WhitepointR: number,
-    WhitepointG: number,
-    WhitepointB: number,
-    WhitepointA: number,
-}, {} :: CalcuatorPrototype))
 
 type HilbertCurve = {
 	Visit: (self: HilbertCurve, Direction: number) -> (),
 	Walk: (self: HilbertCurve, Direction: number) -> (),
-	RIGHT: number,
-	DOWN: number,
-	LEFT: number,
-	NONE: number,
-	UP: number,
-
 	Callback: (X: number, Y: number) -> (),
 	Height: number,
 	Width: number,
@@ -76,6 +56,16 @@ type HilbertCurve = {
 	Level: number,
 	X: number,
 	Y: number,
+}
+
+type DistanceCalcuator = {
+	CalcuateNormalized: CalcuatorFunction,
+    Defualts: DistanceFormulaDefaults,
+    CalculateRaw: CalcuatorFunction,
+    WhitepointR: number,
+    WhitepointG: number,
+    WhitepointB: number,
+    WhitepointA: number,
 }
 
 type ImageData = {
@@ -531,25 +521,25 @@ local function Dither_ErrorDiffusionArray(
 	DistanceCalcuator: DistanceCalcuator,
 	ImageData: ImageData,
 	Palette: Palette,
-	QuantizationType: QuantizationType,
+	DitheringMethod: DitheringMethod,
 	Serpentine: boolean?,
 	MinimumColorDistanceToDither: number?,
 	CalculateErrorLikeGIMP: boolean?,
 )
-	local Kernel = ErrorDiffusionArrays[QuantizationType] :: {number}
+	local Kernel = ErrorDiffusionArrays[DitheringMethod] :: {number}
 	if not Kernel then
-		error(`[Quack] Could not find Error Diffusion Kernel for {QuantizationType}`)
+		error(`[Quack] Could not find Error Diffusion Kernel for {DitheringMethod}`)
 	end
 
 end
 
-local HilbertCurvePrototype = {
-	RIGHT = 3,
-	LEFT = 2,
-	DOWN = 4,
-	NONE = 0,
-	UP = 1,
-}
+local HilbertRight = 3
+local HilbertDown = 4
+local HilbertNone = 0
+local HilbertLeft = 2
+local HilbertUp = 1
+
+local HilbertCurvePrototype = {}
 HilbertCurvePrototype.__index = HilbertCurvePrototype
 
 function HilbertCurvePrototype.Visit(self: HilbertCurve, Direction: number)
@@ -561,13 +551,13 @@ function HilbertCurvePrototype.Visit(self: HilbertCurve, Direction: number)
 		self.Index +=  1
 	end
 	
-	if Direction == self.LEFT then
+	if Direction == HilbertLeft then
 		self.X -= 1
-	elseif Direction == self.RIGHT then
+	elseif Direction == HilbertRight then
 		self.X += 1
-	elseif Direction == self.UP then
+	elseif Direction == HilbertUp then
 		self.Y -= 1
-	elseif Direction == self.DOWN then
+	elseif Direction == HilbertDown then
 		self.Y += 1
 	end
 end
@@ -576,59 +566,40 @@ function HilbertCurvePrototype.Walk(self: HilbertCurve, Direction: number)
 	if self.Level < 1 then return end
 	self.Level -= 1
 	
-	if Direction == self.LEFT then
-		self:Walk(self.UP)
-		self:Visit(self.RIGHT)
-		self:Walk(self.LEFT)
-		self:Visit(self.DOWN)
-		self:Walk(self.LEFT)
-		self:Visit(self.LEFT)
-		self:Walk(self.DOWN)
-	elseif Direction == self.RIGHT then
-		self:Walk(self.DOWN)
-		self:Visit(self.LEFT)
-		self:Walk(self.RIGHT)
-		self:Visit(self.UP)
-		self:Walk(self.RIGHT)
-		self:Visit(self.RIGHT)
-		self:Walk(self.UP)
-	elseif Direction == self.UP then
-		self:Walk(self.LEFT)
-		self:Visit(self.DOWN)
-		self:Walk(self.UP)
-		self:Visit(self.RIGHT)
-		self:Walk(self.UP)
-		self:Visit(self.UP)
-		self:Walk(self.RIGHT)
-	elseif Direction == self.DOWN then
-		self:Walk(self.RIGHT)
-		self:Visit(self.UP)
-		self:Walk(self.DOWN)
-		self:Visit(self.LEFT)
-		self:Walk(self.DOWN)
-		self:Visit(self.DOWN)
-		self:Walk(self.LEFT)
+	if Direction == HilbertLeft then
+		self:Walk(HilbertUp)
+		self:Visit(HilbertRight)
+		self:Walk(HilbertLeft)
+		self:Visit(HilbertDown)
+		self:Walk(HilbertLeft)
+		self:Visit(HilbertLeft)
+		self:Walk(HilbertDown)
+	elseif Direction == HilbertRight then
+		self:Walk(HilbertDown)
+		self:Visit(HilbertLeft)
+		self:Walk(HilbertRight)
+		self:Visit(HilbertUp)
+		self:Walk(HilbertRight)
+		self:Visit(HilbertRight)
+		self:Walk(HilbertUp)
+	elseif Direction == HilbertUp then
+		self:Walk(HilbertLeft)
+		self:Visit(HilbertDown)
+		self:Walk(HilbertUp)
+		self:Visit(HilbertRight)
+		self:Walk(HilbertUp)
+		self:Visit(HilbertUp)
+		self:Walk(HilbertRight)
+	elseif Direction == HilbertDown then
+		self:Walk(HilbertRight)
+		self:Visit(HilbertUp)
+		self:Walk(HilbertDown)
+		self:Visit(HilbertLeft)
+		self:Walk(HilbertDown)
+		self:Visit(HilbertDown)
+		self:Walk(HilbertLeft)
 	end
 	self.Level += 1
-end
-
-local function CreateHilbertCurve(
-	Width: number,
-	Height: number,
-	Callback: (X: number, Y: number) -> ()
-)
-	local self: HilbertCurve = setmetatable({
-		Level = math.floor(math.log(math.max(Width, Height)) / math.log(2) + 1),
-		Callback = Callback,
-		Height = Height,
-		Width = Width,
-		Index = 1,
-		X = 0,
-		Y = 0,
-	}, HilbertCurvePrototype) :: any
-
-	self:Walk(self.UP)
-	self:Visit(self.NONE)
 end
 
 local function Dither_ErrorDiffusionRiemersma(
@@ -656,47 +627,59 @@ local function Dither_ErrorDiffusionRiemersma(
 		Next *= Multiplier
 	end
 
-	HilbertCurve(Width, Height, function(X, Y)
-		local P = pointArray[(X + Y) * Width]
-		local R = P[1]
-		local G = P[2]
-		local B = P[3]
-		local A = P[4]
+	local HilbertCurve: HilbertCurve = setmetatable({
+		Callback = function(X, Y)
+			local P = pointArray[(X + Y) * Width]
+			local R = P[1]
+			local G = P[2]
+			local B = P[3]
+			local A = P[4]
+	
+			for Index, Weight in Weights do
+				local Error = ErrorQueue[(Index + Head) % ErrorQueueSize]
+	
+				R += Error[1] * Weight
+				G += Error[2] * Weight
+				B += Error[3] * Weight
+				A += Error[4] * Weight
+			end
+			-- QuantizedPoint
+			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
+				self.Distance,
+				math.clamp(R, 0, 255),
+				math.clamp(G, 0, 255),
+				math.clamp(B, 0, 255),
+				math.clamp(A, 0, 255)
+			)
+		
+			-- update head and calculate tail
+			Head = (Head + 1) % ErrorQueueSize
+			local Tail = ((Head + ErrorQueueSize) - 1) % ErrorQueueSize
+		
+			-- update error with new value
+			ErrorQueue[Tail][1] = R - QuantizedR
+			ErrorQueue[Tail][2] = G - QuantizedG
+			ErrorQueue[Tail][3] = B - QuantizedB
+			ErrorQueue[Tail][4] = A - QuantizedA
+		
+			-- update point
+			--p.from(quantizedPoint);
+			P[1] = QuantizedR
+			P[2] = QuantizedG
+			P[3] = QuantizedB
+			P[4] = QuantizedA
+		end,
 
-		for Index, Weight in Weights do
-			local Error = ErrorQueue[(Index + Head) % ErrorQueueSize]
+		Level = math.floor(math.log(math.max(Width, Height)) / math.log(2) + 1),
+		Height = Height,
+		Width = Width,
+		Index = 1,
+		X = 0,
+		Y = 0,
+	}, HilbertCurvePrototype) :: any
 
-			R += Error[1] * Weight
-			G += Error[2] * Weight
-			B += Error[3] * Weight
-			A += Error[4] * Weight
-		end
-		-- QuantizedPoint
-		local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
-			self.Distance,
-			math.clamp(R, 0, 255),
-			math.clamp(G, 0, 255),
-			math.clamp(B, 0, 255),
-			math.clamp(A, 0, 255)
-		)
-	
-		-- update head and calculate tail
-		Head = (Head + 1) % ErrorQueueSize
-		local Tail = ((Head + ErrorQueueSize) - 1) % ErrorQueueSize
-	
-		-- update error with new value
-		ErrorQueue[Tail][1] = R - QuantizedR
-		ErrorQueue[Tail][2] = G - QuantizedG
-		ErrorQueue[Tail][3] = B - QuantizedB
-		ErrorQueue[Tail][4] = A - QuantizedA
-	
-		-- update point
-		--p.from(quantizedPoint);
-		P[1] = QuantizedR
-		P[2] = QuantizedG
-		P[3] = QuantizedB
-		P[4] = QuantizedA
-	end)
+	HilbertCurve:Walk(HilbertUp)
+	HilbertCurve:Visit(0)
 end
  
  -- PointContainer is replaced w image data, a simple struct
