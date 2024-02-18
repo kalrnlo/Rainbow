@@ -123,10 +123,6 @@ local BT709 = {
 	},
 }
 
-local function PutWithin0To255(N: number)
-	return math.clamp(N, 0, 255)
-end
-
 -- http://alienryderflex.com/hsp.html
 local function RGBToLum(R: number, G: number, B: number)
 	return math.sqrt(
@@ -291,10 +287,17 @@ local function CalcuateRaw_Euclidean(
     local dB = B2 - B1;
     local dA = A2 - A1;
     return math.sqrt(
+<<<<<<< HEAD
+        ((self.Defaults.KR * dR) * dR) +
+        ((self.Defaults.KG * dG) * dG) +
+        ((self.Defaults.KB * dB) * dB) +
+        ((self.Defaults.KA * dA) * dA),
+=======
         (self.Defaults.KR * dR * dR) +
         (self.Defaults.KG * dG * dG) +
         (self.Defaults.KB * dB * dB) +
         (self.Defaults.KA * dA * dA)
+>>>>>>> c6fdcbd1a0daa30037ae048618bf6fe71c47ffe4
     )
 end
 
@@ -315,9 +318,9 @@ local function CalcuateRaw_CMetric(
     local b = (B1 - B2) * self.WhitepointB
     local dA = (A2 - A1) * self.WhitepointA
     local dE =
-        (bit32.rshift(((512 + rmean) * r * r), 8)) +
-        (bit32.rshift(((767 - rmean) * b * b), 8)) +
-        (4 * g * g)
+        (bit32.rshift((((512 + rmean) * r) * r), 8)) +
+        (bit32.rshift((((767 - rmean) * b) * b), 8)) +
+        ((4 * g) * g)
 
     return math.sqrt((dE + dA) * dA)
 end
@@ -415,7 +418,7 @@ local function CreateCalcuator(
 )
     local Calcuator = Calcuators[DistanceFormula]
     if not Calcuator then
-        error(`[Quack] No distance calcuator exists for {DistanceFormula}`, 2)
+        error(`[Quack] No distance calcuator exists for {DistanceFormula}`, 3)
     end
 
     local self = setmetatable({
@@ -544,7 +547,7 @@ local function FillErrorLine(ErrorLine: {{number}}, Width: number)
 
 	-- create missing arrays
 	for Index = Length + 1, Width do
-		ErrorLine[Index] = table.create(4, 0.0)
+		ErrorLine[Index] = table.create(4, 0)
 	end
 	return ErrorLine
 end
