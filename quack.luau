@@ -612,10 +612,10 @@ local function Dither_ErrorDiffusionArray(
 			OriginalB = Point[3]
 			OriginalA = Point[4]
 
-			local CorrectedR = OriginalR + Error[1]
-			local CorrectedG = OriginalG + Error[2]
-			local CorrectedB = OriginalB + Error[3]
-			local CorrectedA = OriginalA + Error[4]
+			local CorrectedR = math.clamp(OriginalR + Error[1], 0, 255)
+			local CorrectedG = math.clamp(OriginalG + Error[2], 0, 255)
+			local CorrectedB = math.clamp(OriginalB + Error[3], 0, 255)
+			local CorrectedA = math.clamp(OriginalA + Error[4], 0, 255)
 
 			-- Reduced pixel
 			local PaletteR, PaletteG, PaletteB, PaletteA = Palette:NearestColor(
