@@ -63,14 +63,18 @@ type DistanceFormulaDefaults = {
 }
 
 type PalettePrototype = {
-	Nearest: (self: PalettePrototype)
-    -- tostring(Palette) returns the first color in the palette as a hex color string
-    __tostring: (self: PalettePrototype) -> string,
+	Nearest: ((self: PalettePrototype, R: number, G: number, B: number, A: number) -> (number, number, number, number)) &
+		((self: PalettePrototype, Color3: Color3) -> (Color3, number)) &
+		((self: PalettePrototype, RGBA: {number}) -> {number}),
+	-- tostring(Palette) returns the first color in the palette as a hex color string
+	-- same with concat but part of the concatonaded string
+	__concat: (self: PalettePrototype, string) -> string,
+	__tostring: (self: PalettePrototype) -> string,
 	__len: (self: PalettePrototype) -> number,
 }
 
-type Palette = typeof(setmetatable({} :: {
-	Colors: {}
+type Palette<T> = typeof(setmetatable({} :: {
+	Colors: {T}
 }, {} :: PalettePrototype))
 
 type HilbertCurve = {
@@ -311,7 +315,7 @@ local function CalcuateRaw_CMetric(
     local g = (G1 - G2) * self.WhitepointG
     local b = (B1 - B2) * self.WhitepointB
     local dE = ((4 * g) * g) + 
-	bit32.rshift((((512 + rmean) * r) * r), 8) +
+		bit32.rshift((((512 + rmean) * r) * r), 8) +
         bit32.rshift((((767 - rmean) * b) * b), 8)
 
     return math.sqrt((dE + dA) * dA)
