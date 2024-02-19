@@ -44,12 +44,12 @@ type DistanceFormula = "Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" 
 
 type Method = "GlobalPopulation" | "SubRegionPopulation"
 
-type ReturnAs = "buffer" | "table" | "Color3"
+type ReturnAs = "buffer" | "table" | "Color3" 
 
 type Palletize = ((Image: ImageData, Options: PalletizeInfo) -> Palette<{}>) &
 	((Images: {ImageData}, Options: PalletizeInfo) -> Palette<{}>) &
-	((EditableImage: EditableImage, Options: PalletizeInfo) -> Palette<{}>) &
-	((EditableImages: {EditableImage}, Options: PalletizeInfo) -> Palette<{}>)
+	((EditableImage: EditableImage, Options: PalletizeInfo) -> Palette<number>) &
+	((EditableImages: {EditableImage}, Options: PalletizeInfo) -> Palette<number>)
 
 type PalletizeInfo = DitheringInfo & {
 	DistanceFormula: ("Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
@@ -100,7 +100,7 @@ type DistanceFormulaDefaults = {
 type PalettePrototype<T> = {
 	Nearest: ((self: Palette<T>, R: number, G: number, B: number, A: number) -> (number, number, number, number)) &
 		((self: Palette<T>, Color3: Color3) -> (Color3, number)) &
-		((self: Palette<T>, RGBA: {number}) -> {number}) &
+		((self: Palette<T>, RGBOrRGBA: {number}) -> {number}) &
 		((self: Palette<T>, buffer: buffer) -> buffer),
 	-- tostring(Palette) returns the first color in the palette as a hex color string
 	-- same with concat but part of the concatonaded string
