@@ -1,5 +1,6 @@
 --!optimize 2
 --!strict
+--!native
 
 -- Quack
 -- A lightweight-ish color quantization library for luau
