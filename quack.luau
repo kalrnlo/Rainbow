@@ -6,7 +6,7 @@
 -- A lightweight-ish color quantization library for luau
 -- Based on image-quantization and RgbQuant
 -- @Kalrnlo
--- 17/02/2024
+-- 18/02/2024
 
 --[[
 local Image1 = Quant.ExtractData(EditableImage)
@@ -14,12 +14,14 @@ local Image2 = Quack.ExtractData(EditableImage)
 local Image3 = Quack.ExtractData(EditableImage)
 Quack.ExtractDataFor(EditableImage1, EditableImage2, EditableImage3)
 
-local Palette = Quack.PalletizeAsync(table.pack(Image1, Image2, Image3), {
+Quack.PalletizeAsync(table.pack(Image1, Image2, Image3), {
 	DitheringMethod = "FloydSteinberg",
 	DistanceFormula = "Manhattan",
 	Method = "GlobalPopulation",
 	Colors = 256
-}):Await()
+}):After(function(Palette)
+	print(Palette.Colors[1])
+end)
 
 local Palette = Quack.Palletize(Image, {
 	DitheringMethod = "FloydSteinberg",
@@ -95,21 +97,21 @@ type DistanceFormulaDefaults = {
     KA: number,   
 }
 
-type PalettePrototype = {
-	Nearest: ((self: PalettePrototype, R: number, G: number, B: number, A: number) -> (number, number, number, number)) &
-		((self: PalettePrototype, Color3: Color3) -> (Color3, number)) &
-		((self: PalettePrototype, RGBA: {number}) -> {number}) &
-		((self: PalettePrototype, buffer: buffer) -> buffer),
+type PalettePrototype<T> = {
+	Nearest: ((self: Palette<T>, R: number, G: number, B: number, A: number) -> (number, number, number, number)) &
+		((self: Palette<T>, Color3: Color3) -> (Color3, number)) &
+		((self: Palette<T>, RGBA: {number}) -> {number}) &
+		((self: Palette<T>, buffer: buffer) -> buffer),
 	-- tostring(Palette) returns the first color in the palette as a hex color string
 	-- same with concat but part of the concatonaded string
-	__concat: (self: PalettePrototype, string) -> string,
-	__tostring: (self: PalettePrototype) -> string,
-	__len: (self: PalettePrototype) -> number,
+	__concat: (self: Palette<T>, string) -> string,
+	__tostring: (self: Palette<T>) -> string,
+	__len: (self: Palette<T>) -> number,
 }
 
 type Palette<T> = typeof(setmetatable({} :: {
 	Colors: {T}
-}, {} :: PalettePrototype))
+}, {} :: PalettePrototype<T>))
 
 type HilbertCurve = {
 	Visit: (self: HilbertCurve, Direction: number) -> (),
