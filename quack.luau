@@ -43,38 +43,36 @@ type Method = "GlobalPopulation" | "SubRegionPopulation"
 
 type ReturnAs = "buffer" | "table" | "Color3"
 
-type DitheringInfo = (NearestColorInfo & {
+type Palletize = ((Image: ImageData, Options: PalletizeInfo) -> Palette<{}>) &
+	((Images: {ImageData}, Options: PalletizeInfo) -> Palette<{}>) &
+	((EditableImage: EditableImage, Options: PalletizeInfo) -> Palette<{}>) &
+	((EditableImages: {EditableImage}, Options: PalletizeInfo) -> Palette<{}>)
+
+type PalletizeInfo = DitheringInfo & {
+	DistanceFormula: ("Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
+		"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant")?,
+	Method: ("GlobalPopulation" | "SubRegionPopulation")?,
+}
+
+type DitheringInfo = ({
 		DitheringMethod: "NearestColor"?
-	} | (ErrorDiffusionArrayInfo & {
+	} & (ErrorDiffusionArrayInfo & {
 		DitheringMethod: "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
 			"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite"
-	}) | (ErrorDiffusionRiemersmaInfo & {
+	}) & (ErrorDiffusionRiemersmaInfo & {
 		DitheringMethod: "ErrorDiffusionRiemersma"
 	})
 )
 
 type ErrorDiffusionRiemersmaInfo = {
-	MinimumColorDistanceToDither: nil,
-	CalculateErrorLikeGIMP: nil,
 	ErrorPropagation: number?,
-	Serpentine: nil,
 	ErrorQueueSize: number?,
 }
 
 type ErrorDiffusionArrayInfo = {
 	MinimumColorDistanceToDither: number?,
 	CalculateErrorLikeGIMP: boolean?,
-	ErrorPropagation: nil,
 	Serpentine: boolean?,
-	ErrorQueueSize: nil,
-}
-
-type NearestColorInfo = {
-	MinimumColorDistanceToDither: nil,
-	CalculateErrorLikeGIMP: nil,
-	ErrorPropagation: nil,
-	Serpentine: nil,
-	ErrorQueueSize: nil,
 }
 
 type CalcuatorFunction = (
