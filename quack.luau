@@ -27,7 +27,7 @@ local Palette = Quack.Palletize(Image, {
 	Colors = 256
 })
 
-Quack.Dither("FloydSteinberg", Image)
+Quack.Dither("FloydSteinberg", Image, Options)
 --]]
 
 local Future = require(script.Parent.Future)
@@ -42,6 +42,40 @@ type DistanceFormula = "Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" 
 type Method = "GlobalPopulation" | "SubRegionPopulation"
 
 type ReturnAs = "buffer" | "table" | "Color3"
+
+type DitheringInfo = (NearestColorInfo & {
+		DitheringMethod: "NearestColor"?
+	} | (ErrorDiffusionArrayInfo & {
+		DitheringMethod: "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
+			"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite"
+	}) | (ErrorDiffusionRiemersmaInfo & {
+		DitheringMethod: "ErrorDiffusionRiemersma"
+	})
+)
+
+type ErrorDiffusionRiemersmaInfo = {
+	MinimumColorDistanceToDither: nil,
+	CalculateErrorLikeGIMP: nil,
+	ErrorPropagation: number?,
+	Serpentine: nil,
+	ErrorQueueSize: number?,
+}
+
+type ErrorDiffusionArrayInfo = {
+	MinimumColorDistanceToDither: number?,
+	CalculateErrorLikeGIMP: boolean?,
+	ErrorPropagation: nil,
+	Serpentine: boolean?,
+	ErrorQueueSize: nil,
+}
+
+type NearestColorInfo = {
+	MinimumColorDistanceToDither: nil,
+	CalculateErrorLikeGIMP: nil,
+	ErrorPropagation: nil,
+	Serpentine: nil,
+	ErrorQueueSize: nil,
+}
 
 type CalcuatorFunction = (
     self: DistanceCalcuator,
@@ -65,7 +99,8 @@ type DistanceFormulaDefaults = {
 type PalettePrototype = {
 	Nearest: ((self: PalettePrototype, R: number, G: number, B: number, A: number) -> (number, number, number, number)) &
 		((self: PalettePrototype, Color3: Color3) -> (Color3, number)) &
-		((self: PalettePrototype, RGBA: {number}) -> {number}),
+		((self: PalettePrototype, RGBA: {number}) -> {number}) &
+		((self: PalettePrototype, buffer: buffer) -> buffer),
 	-- tostring(Palette) returns the first color in the palette as a hex color string
 	-- same with concat but part of the concatonaded string
 	__concat: (self: PalettePrototype, string) -> string,
