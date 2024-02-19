@@ -98,7 +98,7 @@ type DistanceFormulaDefaults = {
 }
 
 type PalettePrototype<T> = {
-	Nearest: ((self: Palette<T>, R: number, G: number, B: number, A: number) -> (number, number, number, number)) &
+	Nearest: ((self: Palette<T>, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
 		((self: Palette<T>, Color3: Color3) -> (Color3, number)) &
 		((self: Palette<T>, RGBOrRGBA: {number}) -> {number}) &
 		((self: Palette<T>, buffer: buffer) -> buffer),
