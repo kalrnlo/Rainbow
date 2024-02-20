@@ -220,7 +220,6 @@ local RGBToHSL(R: number, G: number, B: number)
 			Delta / (if L < 0.5 then Max + Min else 510 - (Max - Min))
 		else
 			0
-
 	local H = 0
 
 	if Delta > 0 then
@@ -656,7 +655,12 @@ local function Dither_ErrorDiffusionArray(
 	local Dir = 1
 
 	for Index = 1, MaxErrorLines do
-		ErrorLines[Index] = FillErrorLine({}, Width)
+		local ErrorLine = table.create(Width)
+
+		for LineIndex = 1, Width do
+			ErrorLine[LineIndex] = table.create(4, 0)
+		end
+		ErrorLines[Index] = ErrorLine
 	end
 
 	for Y = 1, Height do
