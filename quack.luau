@@ -20,23 +20,34 @@ Quack.ExtractDataFor(EditableImage1, EditableImage2, EditableImage3)
 
 Quack.Calcuator("Manhattan", 255, 255, 255, 0)
 
-Quack.PalletizeAsync(table.pack(Image1, Image2, Image3), {
-	DitheringMethod = "FloydSteinberg",
+Quack.PalettizeAsync(table.pack(Image1, Image2, Image3), {
 	DistanceFormula = "Manhattan",
-	Method = "GlobalPopulation",
 	Colors = 256
 }):After(function(Palette)
 	print(Palette.Colors[1])
 end)
 
-local Palette = Quack.Palletize(Image, {
+local ImageData = Quack.Dither("FloydSteinberg", Palette, {Image, Image2})
+local ImageData = Quack.Dither("FloydSteinberg", Palette, Image)
+
+local Palette = Quack.Palettize(Image, {
+	DistanceFormula = "Manhattan",
+	Colors = 256
+})
+
+local Palette = Quack.QuantizeAsync(Image, {
+	DitheringMethod = "FloydSteinberg",
+	DistanceFormula = "Manhattan",
+	Method = "GlobalPopulation",
+	Colors = 256
+}):Await()
+
+local Palette = Quack.Quantize(Image, {
 	DitheringMethod = "FloydSteinberg",
 	DistanceFormula = "Manhattan",
 	Method = "GlobalPopulation",
 	Colors = 256
 })
-
-Quack.Dither("FloydSteinberg", Image, Options)
 --]]
 
 local Future = require(script.Parent.Future)
@@ -57,7 +68,7 @@ type Palletize = ((Image: ImageData, Options: PalletizeInfo) -> Palette<{}>) &
 	((EditableImage: EditableImage, Options: PalletizeInfo) -> Palette<number>) &
 	((EditableImages: {EditableImage}, Options: PalletizeInfo) -> Palette<number>)
 
-type PalletizeInfo = DitheringInfo & {
+type PalletizeInfo = {
 	DistanceFormula: ("Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
 		"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant")?,
 	Method: ("GlobalPopulation" | "SubRegionPopulation")?,
@@ -680,9 +691,9 @@ local function Dither_ErrorDiffusionArray(
 		local ErrorLine = ErrorLines[1]
 		local Index = lni + XStart
 
-		for X = XStart, XEnd do
+		for X = XStart, XEnd, Dir do
 			-- Image pixel
-			local Point = pointArray[idx];
+			local Point = pointArray[Index];
 			local Error = ErrorLine[X]
 
 			OriginalR = Point[1]
@@ -743,16 +754,16 @@ local function Dither_ErrorDiffusionArray(
 			local DStart = if Dir == 1 then 0 else #Kernels - 1
 			local DEnd = if Dir == 1 then #Kernels else -1
 
-			for I = DStart, DEnd, Dir do
-				local X1 = Kernels[I][2] * Dir
-				local Y1 = Kernels[I][3]
+			for Index2 = DStart, DEnd, Dir do
+				local X1 = Kernels[Index2][2] * Dir
+				local Y1 = Kernels[Index2][3]
 	  
 				if 
 					X1 + X >= 0 and X1 + X < Width and
 					Y1 + Y >= 0 and Y1 + Y < Height
 				then
 					local E = ErrorLines[Y1][X1 + X]
-					local D = Kernels[I][1]
+					local D = Kernels[Index2][1]
 					
 					E[1] += ER * D
 					E[2] += EG * D
@@ -1456,10 +1467,6 @@ export class RGBQuant extends AbstractPaletteQuantizer {
 	 return this._pointArray[
 	   this._getNearestIndex(colorDistanceCalculator, color) | 0
 	 ];
-   }
- 
-   getPointContainer() {
-	 return this._pointContainer;
    }
 
  
