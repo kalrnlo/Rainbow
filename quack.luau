@@ -299,7 +299,6 @@ local function GetNearestIndex(
 	local ClosestIndex
 
 	for Index, ColorBuffer in Palette.Colors do
-		-- waiting for buffer format for color buffers
 		local Distance = Palette.Calcuator:CalculateRaw(R, G, B, A, ReadBufferRGBA(ColorBuffer))
 
 		if Distance < ClosestDistance then 
