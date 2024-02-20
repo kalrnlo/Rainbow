@@ -106,9 +106,10 @@ type PalettePrototype<T> = {
 		((self: Palette<T>, Color3: Color3) -> (Color3, number)) &
 		((self: Palette<T>, RGBOrRGBA: {number}) -> {number}) &
 		((self: Palette<T>, buffer: buffer) -> buffer),
+		
 	-- tostring(Palette) returns the first color in the palette as a hex color string
 	-- same with concat but part of the concatonaded string
-	__concat: (self: Palette<T>, string) -> string,
+	__concat: (self: Palette<T>, String: string) -> string,
 	__tostring: (self: Palette<T>) -> string,
 	__len: (self: Palette<T>) -> number,
 }
@@ -166,6 +167,48 @@ local BT709 = {
 		WHITE = 0.329,
 	},
 }
+
+-- TODO:
+-- Luminance from RGB:
+
+-- Luminance (standard for certain colour spaces): (0.2126*R + 0.7152*G + 0.0722*B) [1]
+-- Luminance (perceived option 1): (0.299*R + 0.587*G + 0.114*B) [2]
+-- Luminance (perceived option 2, slower to calculate):  sqrt( 0.241*R^2 + 0.691*G^2 + 0.068*B^2 ) ? sqrt( 0.299*R^2 + 0.587*G^2 + 0.114*B^2 ) (thanks to @MatthewHerbst) [http://alienryderflex.com/hsp.html]
+
+local function GetRGBALuminosity(R: number, G: number, B: number, A: number?)
+	if A then
+		return (math.min(255, (255 - A + (A * R)) / 255) * Y.RED) +
+			(math.min(255, (255 - A + (A * G)) / 255) * Y.GREEN) +
+			(math.min(255, (255 - A + (A * B)) / 255) * Y.BLUE)
+	else
+		return (R * Y.RED) + (G * Y.GREEN) + (B * Y.BLUE)
+	end
+end
+
+ -- how points get their unint (its a number idk why the lib uses a string, but we arent gonna be doin that)
+ local function RGBAToUint32(R: number, G: number, B: number, A: number)
+	return bit32.rshift(
+		bit32.bor(bit32.lshift(A, 24), bit32.lshift(B, 16), bit32.lshift(G, 8), R), 0
+	)
+ end
+
+-- https://stackoverflow.com/questions/62674500/getting-hex-from-rgba-in-js
+local function RGBAToHex(R: number, G: number, B: number, A: number)
+	local Outparts: {string} = {
+		tonumber(R, 16),
+		tonumber(G, 16),
+		tonumber(B, 16),
+		string.sub(tonumber(math.floor(A * 255), 16) :: any, 0, 2)
+	} :: any
+  
+	-- Pad single-digit output values
+	for Index, Number in Outparts do
+		if #Number == 1 then 
+			Outparts[Index] = `0{Number}`
+		end
+	end
+	return `#{table.concat(Outparts)}`
+end
 
 -- http://alienryderflex.com/hsp.html
 local function RGBToLum(R: number, G: number, B: number)
@@ -227,6 +270,8 @@ local function ExtractData(Data: {Color3} | EditableImage)
         error("[Quack] Extract data failed, array provided may have had 0 indexs")
     end
 end
+
+local ToBit32 = bit32.band
 
 --------------------------------------------------------------------------------
 -- Distance
@@ -895,6 +940,49 @@ local function Dither_NearestColor(
 			Index += 1
 		end
 	end
+end
+
+--------------------------------------------------------------------------------
+-- Palette
+--------------------------------------------------------------------------------
+
+local PalettePrototype = {}
+PalettePrototype.__index = PalettePrototype
+
+function PalettePrototype.__concat<T>(self: Palette<T>, String: string)
+	local Color = self.Colors[1]
+
+	if Color then
+		local Hex = RGBAToHex(
+			buffer.readu8(Color, 0),
+			buffer.readu8(Color, 1),
+			buffer.readu8(Color, 2),
+			buffer.readu8(Color, 3),
+		)
+
+		return `{String}{Hex}`
+	else
+		return `{String}#000000`
+	end
+end
+
+function PalettePrototype.__tostring<T>(self: Palette<T>)
+	local Color = self.Colors[1]
+
+	if Color then
+		return RGBAToHex(
+			buffer.readu8(Color, 0),
+			buffer.readu8(Color, 1),
+			buffer.readu8(Color, 2),
+			buffer.readu8(Color, 3),
+		)
+	else
+		return "#000000"
+	end
+end
+
+function PalettePrototype.__len<T>(self: Palette<T>)
+	return #self.Colors
 end
 
 /*
