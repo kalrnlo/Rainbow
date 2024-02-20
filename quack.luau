@@ -259,6 +259,22 @@ local function ReadBufferRGBA(Buffer: buffer)
 		buffer.readu8(ColorBuffer, 2), buffer.readu8(ColorBuffer, 3)
 end
 
+local function OverwriteColorBuffer(
+	Buffer: buffer,
+	R: number,
+	G: number,
+	B: number,
+	A: number,
+	Uint32: number?
+)
+	buffer.writeu8(Buffer, 0, R)
+	buffer.writeu8(Buffer, 1, G)
+	buffer.writeu8(Buffer, 2, B)
+	buffer.writeu8(Buffer, 3, A)
+	buffer.writeu32(Buffer, 4, Uint32 or RGBAToUint32(R, G, B, A))
+	return Buffer
+end
+
 local function ExtractData(Data: {Color3} | EditableImage)
     if typeof(Data) == "Instance" then
         return EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
@@ -324,7 +340,7 @@ end
 local PalettePrototype = {}
 PalettePrototype.__index = PalettePrototype
 
-function PalettePrototype.__concat<T>(self: Palette<T>, String: string)
+function PalettePrototype.__concat<T>(self: Palette, String: string)
 	local Color = self.Colors[1]
 
 	if Color then
@@ -334,7 +350,7 @@ function PalettePrototype.__concat<T>(self: Palette<T>, String: string)
 	end
 end
 
-function PalettePrototype.__tostring<T>(self: Palette<T>)
+function PalettePrototype.__tostring<T>(self: Palette)
 	local Color = self.Colors[1]
 
 	if Color then
@@ -344,7 +360,7 @@ function PalettePrototype.__tostring<T>(self: Palette<T>)
 	end
 end
 
-function PalettePrototype.__len<T>(self: Palette<T>)
+function PalettePrototype.__len<T>(self: Palette)
 	return #self.Colors
 end
 
@@ -767,7 +783,8 @@ local function Dither_ErrorDiffusionArray(
 
 		for X = XStart, XEnd, Dir do
 			-- Image pixel
-			local R, G, B, A = ReadBufferRGBA(ImageData.Pixels[Index])
+			local ColorBuffer = ImageData.Pixels[Index]
+			local R, G, B, A = ReadBufferRGBA(ColorBuffer)
 			local Error = ErrorLine[X]
 
 			local CorrectedR = math.clamp(R + Error[1], 0, 255)
@@ -784,7 +801,8 @@ local function Dither_ErrorDiffusionArray(
 				CorrectedA
 			)
 
-			ImageData.Pixels[Index] = CreateColorBuffer(
+			ImageData.Pixels[Index] = OverwriteColorBuffer(
+				ColorBuffer,
 				PaletteR,
 				PaletteG,
 				PaletteB,
@@ -938,7 +956,8 @@ local function Dither_ErrorDiffusionRiemersma(
 	local HilbertCurve: HilbertCurve = setmetatable({
 		Callback = function(X, Y)
 			local PixelIndex = (X + Y) * Width
-			local R, G, B, A = ReadBufferRGBA(ImageData.Pixels[PixelIndex])
+			local ColorBuffer = ImageData.Pixels[PixelIndex]
+			local R, G, B, A = ReadBufferRGBA(ColorBuffer)
 	
 			for Index, Weight in Weights do
 				local Error = ErrorQueue[(Index + Head) % ErrorQueueSize]
@@ -969,7 +988,8 @@ local function Dither_ErrorDiffusionRiemersma(
 		
 			-- update point
 			--p.from(quantizedPoint);
-			ImageData.Pixels[PixelIndex] = CreateColorBuffer(
+			ImageData.Pixels[PixelIndex] = OverwriteColorBuffer(
+				ColorBuffer,
 				QuantizedR,
 				QuantizedG,
 				QuantizedB,
@@ -999,7 +1019,8 @@ local function Dither_NearestColor(
 
 		for X = 1, ImageData.Width do
 			-- Image pixel
-			local R, G, B, A = ReadBufferRGBA(ImageData.Pixels[Index])
+			local ColorBuffer = ImageData.Pixels[Index]
+			local R, G, B, A = ReadBufferRGBA(ColorBuffer)
 
 			-- Reduced pixel
 			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
@@ -1010,7 +1031,8 @@ local function Dither_NearestColor(
 				A
 			)
 
-			ImageData.Pixels[Index] = CreateColorBuffer(
+			ImageData.Pixels[Index] = OverwriteColorBuffer(
+				ColorBuffer,
 				QuantizedR,
 				QuantizedG,
 				QuantizedB,
