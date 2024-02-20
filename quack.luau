@@ -8,6 +8,10 @@
 -- @Kalrnlo
 -- 18/02/2024
 
+-- TODO: Port over histogram class and other classes from image-quantization into luau
+-- and remove usage of those closes for luau version as we are just having singular functions
+-- and only using a palette class (hopefully) as a return for simplicity for quack users (it feels so weird saying quack users help)
+
 --[[
 local Image1 = Quant.ExtractData(EditableImage)
 local Image2 = Quack.ExtractData(EditableImage)
