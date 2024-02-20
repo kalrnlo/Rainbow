@@ -114,23 +114,24 @@ type DistanceFormulaDefaults = {
     KA: number,   
 }
 
-type PalettePrototype<T> = {
-	Nearest: ((self: Palette<T>, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
-		((self: Palette<T>, Color3: Color3) -> (Color3, number)) &
-		((self: Palette<T>, RGBOrRGBA: {number}) -> {number}) &
-		((self: Palette<T>, buffer: buffer) -> buffer),
+type PalettePrototype = {
+	Nearest: ((self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
+		((self: Palette, Color3: Color3) -> (Color3, number)) &
+		((self: Palette>, RGBOrRGBA: {number}) -> {number}) &
+		((self: Palette, buffer: buffer) -> buffer),
 		
 	-- tostring(Palette) returns the first color in the palette as a hex color string
 	-- same with concat but part of the concatonaded string
-	__concat: (self: Palette<T>, String: string) -> string,
-	__tostring: (self: Palette<T>) -> string,
-	__len: (self: Palette<T>) -> number,
+	__concat: (self: Palette, String: string) -> string,
+	__tostring: (self: Palette) -> string,
+	__len: (self: Palette) -> number,
 }
 
-type Palette<T> = typeof(setmetatable({} :: {
+type Palette = typeof(setmetatable({} :: {
+	Calcuator: DistanceCalcuator,
 	Uint32Indexs: {number},
-	Colors: {T}
-}, {} :: PalettePrototype<T>))
+	Colors: {buffer}
+}, {} :: PalettePrototype))
 
 type HilbertCurve = {
 	Visit: (self: HilbertCurve, Direction: number) -> (),
