@@ -226,7 +226,7 @@ local function RGBAToHex(R: number, G: number, B: number, A: number)
 	return `#{table.concat(Outparts)}`
 end
 
-local RGBToHSL(R: number, G: number, B: number)
+local function RGBToHSL(R: number, G: number, B: number)
 	local Min = math.min(R, G, B)
 	local Max = math.max(R, G, B)
 	local L = (Min + Max) / 510
@@ -371,7 +371,7 @@ local function CalcuateRaw_Euclidean(
     R2: number,
     G2: number,
     B2: number,
-    A2: number,
+    A2: number
 )
     local dR = R2 - R1;
     local dG = G2 - G1;
@@ -394,7 +394,7 @@ local function CalcuateRaw_CMetric(
     R2: number,
     G2: number,
     B2: number,
-    A2: number,
+    A2: number
 )
     local rmean = ((R1 + R2) / 2) * self.WhitepointR
     local dA = (A2 - A1) * self.WhitepointA
@@ -645,7 +645,7 @@ local function Dither_ErrorDiffusionArray(
 	DitheringMethod: DitheringMethod,
 	Serpentine: boolean?,
 	MinimumColorDistanceToDither: number?,
-	CalculateErrorLikeGIMP: boolean?,
+	CalculateErrorLikeGIMP: boolean?
 )
 	local Kernels = ErrorDiffusionArrays[DitheringMethod] :: {{number}}
 	if not Kernels then
@@ -845,7 +845,7 @@ local function Dither_ErrorDiffusionRiemersma(
 	ImageData: ImageData,
 	Palette: Palette,
 	ErrorPropagation: number?,
-	ErrorQueueSize: number?,
+	ErrorQueueSize: number?
 )
 	local ErrorPropagation = ErrorPropagation or 1	
 	local ErrorQueueSize = ErrorQueueSize or 16
@@ -923,7 +923,7 @@ end
 local function Dither_NearestColor(
 	DistanceCalcuator: DistanceCalcuator,
 	ImageData: ImageData,
-	Palette: Palette,
+	Palette: Palette
 )
 	local pointArray = pointContainer.getPointArray();
 
@@ -1030,7 +1030,7 @@ function PalettePrototype.__concat<T>(self: Palette<T>, String: string)
 			buffer.readu8(Color, 0),
 			buffer.readu8(Color, 1),
 			buffer.readu8(Color, 2),
-			buffer.readu8(Color, 3),
+			buffer.readu8(Color, 3)
 		)
 
 		return `{String}{Hex}`
@@ -1047,7 +1047,7 @@ function PalettePrototype.__tostring<T>(self: Palette<T>)
 			buffer.readu8(Color, 0),
 			buffer.readu8(Color, 1),
 			buffer.readu8(Color, 2),
-			buffer.readu8(Color, 3),
+			buffer.readu8(Color, 3)
 		)
 	else
 		return "#000000"
