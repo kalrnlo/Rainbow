@@ -210,47 +210,34 @@ local function RGBAToHex(R: number, G: number, B: number, A: number)
 	return `#{table.concat(Outparts)}`
 end
 
--- http://alienryderflex.com/hsp.html
-local function RGBToLum(R: number, G: number, B: number)
-	return math.sqrt(
-		(Pr * R * R) +
-		(Pg * G * G) +
-		(Pb * B * B)
-	)
-end
-
--- http://rgb2hsl.nichabi.com/javascript-function.php
-local function RGBToHSL(R: number, G: number, B: number)
-	R /= 255
-	G /= 255
-	B /= 255
-
-	local Max = math.max(R, G, B)
+local RGBToHSL(R: number, G: number, B: number)
 	local Min = math.min(R, G, B)
-	local L = (Max + Min) / 2
+	local Max = math.max(R, G, B)
+	local L = (Min + Max) / 510
+	local Delta = Max - Min
 
-	if Max == Min then
-		return 0, 0, RGBToLum(R, G, B)
-	else
-		local D = Max - Min
-		local S = if L > 0.5 then D / (2 - Max - Min) else D / (Max + Min)
-		local H = if Max == R then
-				((G - B) / D) + (if G < B then 6 else 0)
+	local S = if L > 0 and L < 1 then 
+			Delta / (if L < 0.5 then Max + Min else 510 - (Max - Min))
+		else
+			0
+
+	local H = 0
+
+	if Delta > 0 then
+		H = (
+			if Max == R then
+				G - B / Delta
 			elseif Max == G then
-				((B - R) / D) + 2
-			elseif Max == B then
-				((R - G) / D) + 4
+				(2 + (B - R)) / Delta
 			else
-				0
+				(4 + (R - G)) / Delta
+		) * 60
 
-		return (H / 6), S, RGBToLum(R, G, B)
+		if H < 0 then
+			H += 360
+		end
 	end
-end
-
--- returns R, G, B
-local function i32ToRGB(i32: number)
-	return bit32.band(i32, 0xff), bit32.rshift(bit32.band(i32, 0xff00), 8),
-		bit32.rshift(bit32.band(i32, 0xff0000), 16)
+	return H, S, L
 end
 
 local function ExtractData(Data: {Color3} | EditableImage)
@@ -271,7 +258,7 @@ local function ExtractData(Data: {Color3} | EditableImage)
     end
 end
 
-local ToBit32 = bit32.band
+local F64Tou32 = bit32.band
 
 --------------------------------------------------------------------------------
 -- Distance
