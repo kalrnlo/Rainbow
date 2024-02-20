@@ -892,3 +892,571 @@ local function Dither_NearestColor(
 		end
 	end
 end
+
+/*
+ * Copyright (c) 2015, Leon Sorokin
+ * All rights reserved. (MIT Licensed)
+ *
+ * ColorHistogram.js - an image quantization lib
+ */
+
+/**
+ * @preserve TypeScript port:
+ * Copyright 2015-2018 Igor Bezkrovnyi
+ * All rights reserved. (MIT Licensed)
+ *
+ * colorHistogram.ts - part of Image Quantization Library
+ */
+ import { HueStatistics } from '../../utils/hueStatistics';
+ import { PointContainer } from '../../utils/pointContainer';
+ import { stableSort } from '../../utils/arithmetic';
+ 
+ interface Box {
+   x: number;
+   y: number;
+   h: number;
+   w: number;
+ }
+ 
+ export class ColorHistogram {
+   private static _boxSize = [64, 64];
+   private static _boxPixels = 2;
+   private static _hueGroups = 10;
+ 
+   // 1 = by global population, 2 = subregion population threshold
+   private _method: number;
+ 
+   // HueStatistics instance
+   private _hueStats: HueStatistics;
+ 
+   private _histogram: { [color: string]: number };
+ 
+   // # of highest-frequency colors to start with for palette reduction
+   private _initColors: number;
+ 
+   // if > 0, enables hues stats and min-color retention per group
+   private _minHueCols: number;
+ 
+   constructor(method: number, colors: number) {
+	 // 1 = by global population, 2 = subregion population threshold
+	 this._method = method;
+ 
+	 // if > 0, enables hues stats and min-color retention per group
+	 this._minHueCols = colors << 2; // opts.minHueCols || 0;
+ 
+	 // # of highest-frequency colors to start with for palette reduction
+	 this._initColors = colors << 2;
+ 
+	 // HueStatistics instance
+	 this._hueStats = new HueStatistics(
+	   ColorHistogram._hueGroups,
+	   this._minHueCols,
+	 );
+ 
+	 this._histogram = Object.create(null);
+   }
+ 
+   sample(pointContainer: PointContainer) {
+	 switch (this._method) {
+	   case 1:
+		 this._colorStats1D(pointContainer);
+		 break;
+	   case 2:
+		 this._colorStats2D(pointContainer);
+		 break;
+	 }
+   }
+ 
+   getImportanceSortedColorsIDXI32() {
+	 // TODO: fix typing issue in stableSort func
+	 const sorted = stableSort(
+	   Object.keys(this._histogram),
+	   (a, b) => this._histogram[b] - this._histogram[a],
+	 );
+	 if (sorted.length === 0) {
+	   return [];
+	 }
+ 
+	 let idxi32;
+	 switch (this._method) {
+	   case 1:
+		 const initialColorsLimit = Math.min(sorted.length, this._initColors);
+		 const last = sorted[initialColorsLimit - 1];
+		 const freq = this._histogram[last];
+ 
+		 idxi32 = sorted.slice(0, initialColorsLimit);
+ 
+		 // add any cut off colors with same freq as last
+		 let pos = initialColorsLimit;
+		 const len = sorted.length;
+		 while (pos < len && this._histogram[sorted[pos]] === freq) {
+		   idxi32.push(sorted[pos++]);
+		 }
+ 
+		 // inject min huegroup colors
+		 this._hueStats.injectIntoArray(idxi32);
+		 break;
+ 
+	   case 2:
+		 idxi32 = sorted;
+		 break;
+ 
+	   default:
+		 // TODO: rethink errors
+		 throw new Error('Incorrect method');
+	 }
+ 
+	 // int32-ify values
+	 return idxi32.map((v) => +v);
+   }
+ 
+   // global top-population
+   private _colorStats1D(pointContainer: PointContainer) {
+	 const histG = this._histogram;
+	 const pointArray = pointContainer.getPointArray();
+	 const len = pointArray.length;
+ 
+	 for (let i = 0; i < len; i++) {
+	   const col = pointArray[i].uint32;
+ 
+	   // collect hue stats
+	   this._hueStats.check(col);
+ 
+	   if (col in histG) {
+		 histG[col]++;
+	   } else {
+		 histG[col] = 1;
+	   }
+	 }
+   }
+ 
+   // population threshold within subregions
+   // FIXME: this can over-reduce (few/no colors same?), need a way to keep
+   // important colors that dont ever reach local thresholds (gradients?)
+   private _colorStats2D(pointContainer: PointContainer) {
+	 const width = pointContainer.getWidth();
+	 const height = pointContainer.getHeight();
+	 const pointArray = pointContainer.getPointArray();
+ 
+	 const boxW = ColorHistogram._boxSize[0];
+	 const boxH = ColorHistogram._boxSize[1];
+	 const area = boxW * boxH;
+	 const boxes = this._makeBoxes(width, height, boxW, boxH);
+	 const histG = this._histogram;
+ 
+	 boxes.forEach((box) => {
+	   let effc = Math.round((box.w * box.h) / area) * ColorHistogram._boxPixels;
+	   if (effc < 2) effc = 2;
+ 
+	   const histL: Record<string, number> = {};
+	   this._iterateBox(box, width, (i) => {
+		 const col = pointArray[i].uint32;
+ 
+		 // collect hue stats
+		 this._hueStats.check(col);
+ 
+		 if (col in histG) {
+		   histG[col]++;
+		 } else if (col in histL) {
+		   if (++histL[col] >= effc) {
+			 histG[col] = histL[col];
+		   }
+		 } else {
+		   histL[col] = 1;
+		 }
+	   });
+	 });
+ 
+	 // inject min huegroup colors
+	 this._hueStats.injectIntoDictionary(histG);
+   }
+ 
+   // iterates @bbox within a parent rect of width @wid; calls @fn, passing index within parent
+   private _iterateBox(bbox: Box, wid: number, fn: (i: number) => void) {
+	 const b = bbox;
+	 const i0 = b.y * wid + b.x;
+	 const i1 = (b.y + b.h - 1) * wid + (b.x + b.w - 1);
+	 const incr = wid - b.w + 1;
+ 
+	 let cnt = 0;
+	 let i = i0;
+ 
+	 do {
+	   fn.call(this, i);
+	   i += ++cnt % b.w === 0 ? incr : 1;
+	 } while (i <= i1);
+   }
+ 
+   /**
+	*    partitions a rectangle of width x height into
+	*    array of boxes stepX x stepY (or less)
+	*/
+   private _makeBoxes(
+	 width: number,
+	 height: number,
+	 stepX: number,
+	 stepY: number,
+   ) {
+	 const wrem = width % stepX;
+	 const hrem = height % stepY;
+	 const xend = width - wrem;
+	 const yend = height - hrem;
+	 const boxesArray = [];
+ 
+	 for (let y = 0; y < height; y += stepY) {
+	   for (let x = 0; x < width; x += stepX) {
+		 boxesArray.push({
+		   x,
+		   y,
+		   w: x === xend ? wrem : stepX,
+		   h: y === yend ? hrem : stepY,
+		 });
+	   }
+	 }
+ 
+	 return boxesArray;
+   }
+ }
+
+ /*
+ * Copyright (c) 2015, Leon Sorokin
+ * All rights reserved. (MIT Licensed)
+ *
+ * RGBQuant.js - an image quantization lib
+ */
+
+/**
+ * @preserve TypeScript port:
+ * Copyright 2015-2018 Igor Bezkrovnyi
+ * All rights reserved. (MIT Licensed)
+ *
+ * rgbquant.ts - part of Image Quantization Library
+ */
+
+import { Palette } from '../../utils/palette';
+import { Point } from '../../utils/point';
+import { PointContainer } from '../../utils/pointContainer';
+import { AbstractDistanceCalculator } from '../../distance/distanceCalculator';
+import { ColorHistogram } from './colorHistogram';
+import { AbstractPaletteQuantizer } from '../paletteQuantizer';
+import { PaletteQuantizerYieldValue } from '../paletteQuantizerYieldValue';
+import { stableSort } from '../../utils/arithmetic';
+import { ProgressTracker } from '../../utils';
+
+class RemovedColor {
+  readonly index: number;
+  readonly color: Point;
+  readonly distance: number;
+
+  constructor(index: number, color: Point, distance: number) {
+    this.index = index;
+    this.color = color;
+    this.distance = distance;
+  }
+}
+
+// TODO: make input/output image and input/output palettes with instances of class Point only!
+export class RGBQuant extends AbstractPaletteQuantizer {
+  // desired final palette size
+  private readonly _colors: number;
+
+  // color-distance threshold for initial reduction pass
+  private readonly _initialDistance: number;
+
+  // subsequent passes threshold
+  private readonly _distanceIncrement: number;
+
+  // accumulated histogram
+  private readonly _histogram: ColorHistogram;
+  private readonly _distance: AbstractDistanceCalculator;
+
+  constructor(
+    colorDistanceCalculator: AbstractDistanceCalculator,
+    colors = 256,
+    method = 2,
+  ) {
+    super();
+    this._distance = colorDistanceCalculator;
+    // desired final palette size
+    this._colors = colors;
+
+    // histogram to accumulate
+    this._histogram = new ColorHistogram(method, colors);
+
+    this._initialDistance = 0.01;
+    this._distanceIncrement = 0.005;
+  }
+
+  // gathers histogram info
+  sample(image: PointContainer) {
+    /*
+     var pointArray = image.getPointArray(), max = [0, 0, 0, 0], min = [255, 255, 255, 255];
+
+     for (var i = 0, l = pointArray.length; i < l; i++) {
+     var color = pointArray[i];
+     for (var componentIndex = 0; componentIndex < 4; componentIndex++) {
+     if (max[componentIndex] < color.rgba[componentIndex]) max[componentIndex] = color.rgba[componentIndex];
+     if (min[componentIndex] > color.rgba[componentIndex]) min[componentIndex] = color.rgba[componentIndex];
+     }
+     }
+     var rd = max[0] - min[0], gd = max[1] - min[1], bd = max[2] - min[2], ad = max[3] - min[3];
+     this._distance.setWhitePoint(rd, gd, bd, ad);
+
+     this._initialDistance = (Math.sqrt(rd * rd + gd * gd + bd * bd + ad * ad) / Math.sqrt(255 * 255 + 255 * 255 + 255 * 255)) * 0.01;
+     */
+
+    this._histogram.sample(image);
+  }
+
+  // reduces histogram to palette, remaps & memoizes reduced colors
+  *quantize() {
+    const idxi32 = this._histogram.getImportanceSortedColorsIDXI32();
+    if (idxi32.length === 0) {
+      throw new Error('No colors in image');
+    }
+
+    yield* this._buildPalette(idxi32);
+  }
+
+  // reduces similar colors from an importance-sorted Uint32 rgba array
+  private *_buildPalette(
+    idxi32: number[],
+  ): IterableIterator<PaletteQuantizerYieldValue> {
+    // reduce histogram to create initial palette
+    // build full rgb palette
+    const palette = new Palette();
+    const colorArray = palette.getPointContainer().getPointArray();
+    const usageArray = new Array(idxi32.length);
+
+    for (let i = 0; i < idxi32.length; i++) {
+      colorArray.push(Point.createByUint32(idxi32[i]));
+      usageArray[i] = 1;
+    }
+
+    const len = colorArray.length;
+    const memDist = [];
+
+    let palLen = len;
+    let thold = this._initialDistance;
+
+    // palette already at or below desired length
+    while (palLen > this._colors) {
+      memDist.length = 0;
+
+      // iterate palette
+      for (let i = 0; i < len; i++) {
+        if (usageArray[i] === 0) continue;
+        const pxi = colorArray[i];
+        // if (!pxi) continue;
+
+        for (let j = i + 1; j < len; j++) {
+          if (usageArray[j] === 0) continue;
+          const pxj = colorArray[j];
+          // if (!pxj) continue;
+
+          const dist = this._distance.calculateNormalized(pxi, pxj);
+          if (dist < thold) {
+            // store index,rgb,dist
+            memDist.push(new RemovedColor(j, pxj, dist));
+            usageArray[j] = 0;
+            palLen--;
+          }
+        }
+      }
+      // palette reduction pass
+      // console.log("palette length: " + palLen);
+
+      // if palette is still much larger than target, increment by larger initDist
+      thold +=
+        palLen > this._colors * 3
+          ? this._initialDistance
+          : this._distanceIncrement;
+    }
+
+    // if palette is over-reduced, re-add removed colors with largest distances from last round
+    if (palLen < this._colors) {
+      // sort descending
+      stableSort(memDist, (a, b) => b.distance - a.distance);
+
+      let k = 0;
+      while (palLen < this._colors && k < memDist.length) {
+        const removedColor = memDist[k];
+        // re-inject rgb into final palette
+        usageArray[removedColor.index] = 1;
+        palLen++;
+        k++;
+      }
+    }
+
+    let colors = colorArray.length;
+    for (let colorIndex = colors - 1; colorIndex >= 0; colorIndex--) {
+      if (usageArray[colorIndex] === 0) {
+        if (colorIndex !== colors - 1) {
+          colorArray[colorIndex] = colorArray[colors - 1];
+        }
+        --colors;
+      }
+    }
+    colorArray.length = colors;
+
+    palette.sort();
+  }
+}
+
+/*
+ * Copyright (c) 2015, Leon Sorokin
+ * All rights reserved. (MIT Licensed)
+ *
+ * RGBQuant.js - an image quantization lib
+ */
+
+/**
+ * @preserve
+ * Copyright 2015-2018 Igor Bezkrovnyi
+ * All rights reserved. (MIT Licensed)
+ *
+ * palette.ts - part of Image Quantization Library
+ */
+
+ import { Point } from './point';
+ import { PointContainer } from './pointContainer';
+ import { AbstractDistanceCalculator } from '../distance/distanceCalculator';
+ import { rgb2hsl } from '../conversion/rgb2hsl';
+ 
+ // TODO: make paletteArray via pointContainer, so, export will be available via pointContainer.exportXXX
+ 
+ const hueGroups = 10;
+ 
+ export function hueGroup(hue: number, segmentsNumber: number) {
+   const maxHue = 360;
+   const seg = maxHue / segmentsNumber;
+   const half = seg / 2;
+ 
+   for (let i = 1, mid = seg - half; i < segmentsNumber; i++, mid += seg) {
+	 if (hue >= mid && hue < mid + seg) return i;
+   }
+   return 0;
+ }
+ 
+ export class Palette {
+   private readonly _pointContainer: PointContainer;
+   private readonly _pointArray: Point[] = [];
+   private _i32idx: { [key: string]: number } = {};
+ 
+   constructor() {
+	 this._pointContainer = new PointContainer();
+	 this._pointContainer.setHeight(1);
+	 this._pointArray = this._pointContainer.getPointArray();
+   }
+ 
+   add(color: Point) {
+	 this._pointArray.push(color);
+	 this._pointContainer.setWidth(this._pointArray.length);
+   }
+ 
+   has(color: Point) {
+	 for (let i = this._pointArray.length - 1; i >= 0; i--) {
+	   if (color.uint32 === this._pointArray[i].uint32) return true;
+	 }
+ 
+	 return false;
+   }
+ 
+   // TOTRY: use HUSL - http://boronine.com/husl/ http://www.husl-colors.org/ https://github.com/husl-colors/husl
+   getNearestColor(
+	 colorDistanceCalculator: AbstractDistanceCalculator,
+	 color: Point,
+   ) {
+	 return this._pointArray[
+	   this._getNearestIndex(colorDistanceCalculator, color) | 0
+	 ];
+   }
+ 
+   getPointContainer() {
+	 return this._pointContainer;
+   }
+
+ 
+   private _nearestPointFromCache(key: string) {
+	 return typeof this._i32idx[key] === 'number' ? this._i32idx[key] : -1;
+   }
+ 
+   private _getNearestIndex(
+	 colorDistanceCalculator: AbstractDistanceCalculator,
+	 point: Point,
+   ) {
+	 let idx = this._nearestPointFromCache('' + point.uint32);
+	 if (idx >= 0) return idx;
+ 
+	 let minimalDistance = Number.MAX_VALUE;
+ 
+	 idx = 0;
+	 for (let i = 0, l = this._pointArray.length; i < l; i++) {
+	   const p = this._pointArray[i];
+	   const distance = colorDistanceCalculator.calculateRaw(
+		 point.r,
+		 point.g,
+		 point.b,
+		 point.a,
+		 p.r,
+		 p.g,
+		 p.b,
+		 p.a,
+	   );
+ 
+	   if (distance < minimalDistance) {
+		 minimalDistance = distance;
+		 idx = i;
+	   }
+	 }
+ 
+	 this._i32idx[point.uint32] = idx;
+	 return idx;
+   }
+ 
+
+ 
+   // TODO: group very low lum and very high lum colors
+   // TODO: pass custom sort order
+   // TODO: sort criteria function should be placed to HueStats class
+   sort() {
+	 this._i32idx = {};
+	 this._pointArray.sort((a: Point, b: Point) => {
+	   const hslA = rgb2hsl(a.r, a.g, a.b);
+	   const hslB = rgb2hsl(b.r, b.g, b.b);
+ 
+	   // sort all grays + whites together
+	   const hueA =
+		 a.r === a.g && a.g === a.b ? 0 : 1 + hueGroup(hslA.h, hueGroups);
+	   const hueB =
+		 b.r === b.g && b.g === b.b ? 0 : 1 + hueGroup(hslB.h, hueGroups);
+	   /*
+		var hueA = (a.r === a.g && a.g === a.b) ? 0 : 1 + Utils.hueGroup(hslA.h, hueGroups);
+		var hueB = (b.r === b.g && b.g === b.b) ? 0 : 1 + Utils.hueGroup(hslB.h, hueGroups);
+		*/
+ 
+	   const hueDiff = hueB - hueA;
+	   if (hueDiff) return -hueDiff;
+ 
+	   /*
+		var lumDiff = Utils.lumGroup(+hslB.l.toFixed(2)) - Utils.lumGroup(+hslA.l.toFixed(2));
+		if (lumDiff) return -lumDiff;
+		*/
+	   const lA = a.getLuminosity(true);
+	   const lB = b.getLuminosity(true);
+ 
+	   if (lB - lA !== 0) return lB - lA;
+ 
+	   const satDiff = ((hslB.s * 100) | 0) - ((hslA.s * 100) | 0);
+	   if (satDiff) return -satDiff;
+ 
+	   return 0;
+	 });
+   }
+ }
+
+ -- how points get their unint (its a number idk why the lib uses a string, but we arent gonna be doin that)
+ private _loadUINT32() {
+    this.uint32 =
+      ((this.a << 24) | (this.b << 16) | (this.g << 8) | this.r) >>> 0;
+  }
