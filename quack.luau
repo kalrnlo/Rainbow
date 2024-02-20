@@ -155,7 +155,7 @@ type DistanceCalcuator = {
 }
 
 type ImageData = {
-	Pixels: buffer,
+	Pixels: {buffer},
 	Height: number,
 	Width: number,
 }
@@ -200,30 +200,15 @@ local function GetRGBALuminosity(R: number, G: number, B: number, A: number?)
 	end
 end
 
- -- how points get their unint (its a number idk why the lib uses a string, but we arent gonna be doin that)
- local function RGBAToUint32(R: number, G: number, B: number, A: number)
+local function RGBAToUint32(R: number, G: number, B: number, A: number)
 	return bit32.rshift(
 		bit32.bor(bit32.lshift(A, 24), bit32.lshift(B, 16), bit32.lshift(G, 8), R), 0
 	)
  end
 
--- https://stackoverflow.com/questions/62674500/getting-hex-from-rgba-in-js
 local function RGBAToHex(R: number, G: number, B: number, A: number)
-	local Outparts: {string} = {
-		tonumber(R, 16),
-		tonumber(G, 16),
-		tonumber(B, 16),
-		bit32.extract(tonumber(math.floor(A * 255), 16), 0, 16),
-		string.sub(tonumber(math.floor(A * 255), 16) :: any, 0, 2),
-	} :: any
-  
-	-- Pad single-digit output values
-	for Index, Number in Outparts do
-		if #Number == 1 then 
-			Outparts[Index] = `0{Number}`
-		end
-	end
-	return `#{table.concat(Outparts)}`
+	--return string.format("#%02X%02X%02X%02X", R, G, B, math.clamp(math.floor(A * 255), 0, 255))
+	return string.format("#%02X%02X%02X", R, G, B)
 end
 
 local function RGBToHSL(R: number, G: number, B: number)
@@ -255,6 +240,25 @@ local function RGBToHSL(R: number, G: number, B: number)
 	return H, S, L
 end
 
+local function CreateColorBuffer(R: number, G: number, B: number, A: number, Uint32: number?)
+	local Buffer = buffer.create(8)
+	buffer.writeu8(Buffer, 0, R)
+	buffer.writeu8(Buffer, 1, G)
+	buffer.writeu8(Buffer, 2, B)
+	buffer.writeu8(Buffer, 3, A)
+	buffer.writeu32(Buffer, 4, Uint32 or RGBAToUint32(R, G, B, A))
+	return Buffer
+end
+
+local function ReadBufferUint32(PaletteBuffer: buffer)
+	return buffer.readu32(ColorBuffer, 4)
+end
+
+local function ReadBufferRGBA(Buffer: buffer)
+	return buffer.readu8(ColorBuffer, 0), buffer.readu8(ColorBuffer, 1),
+		buffer.readu8(ColorBuffer, 2), buffer.readu8(ColorBuffer, 3)
+end
+
 local function ExtractData(Data: {Color3} | EditableImage)
     if typeof(Data) == "Instance" then
         return EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
@@ -274,6 +278,76 @@ local function ExtractData(Data: {Color3} | EditableImage)
 end
 
 local f64Tou32 = bit32.band
+
+--------------------------------------------------------------------------------
+-- Palette
+--------------------------------------------------------------------------------
+
+local function GetNearestIndex(
+	Palette: Palette,
+	R: number,
+	G: number,
+	B: number,
+	A: number,
+	Uint32: number?
+)
+	local Uint32 = Uint32 or RGBAToUint32(R, G, B, A)
+	local Index = Palette.Uint32Indexs[Uint32]
+	if Index then return Index end
+	
+	local ClosestDistance = math.huge
+	local ClosestIndex
+
+	for Index, ColorBuffer in Palette.Colors do
+		-- waiting for buffer format for color buffers
+		local Distance = Palette.Calcuator:CalculateRaw(R, G, B, A, ReadBufferRGBA(ColorBuffer))
+
+		if Distance < ClosestDistance then 
+			ClosestDistance = Distance
+			ClosestIndex = Index
+		end
+	end
+
+	Palette.Uint32Indexs[Uint32] = Index
+	return Index
+end
+
+local function GetNearestColor(
+	Palette: Palette,
+	R: number,
+	G: number,
+	B: number,
+	A: number
+)
+	return Palette.Colors[GetNearestIndex(Palette, R, G, B, A)] or nil
+end
+
+local PalettePrototype = {}
+PalettePrototype.__index = PalettePrototype
+
+function PalettePrototype.__concat<T>(self: Palette<T>, String: string)
+	local Color = self.Colors[1]
+
+	if Color then
+		return `{String}{RGBAToHex(ReadBufferRGBA(Color))}`
+	else
+		return `{String}#000000`
+	end
+end
+
+function PalettePrototype.__tostring<T>(self: Palette<T>)
+	local Color = self.Colors[1]
+
+	if Color then
+		return RGBAToHex(ReadBufferRGBA(Color))
+	else
+		return "#000000"
+	end
+end
+
+function PalettePrototype.__len<T>(self: Palette<T>)
+	return #self.Colors
+end
 
 --------------------------------------------------------------------------------
 -- Distance
@@ -683,30 +757,24 @@ local function Dither_ErrorDiffusionArray(
 		if Serpentine then
 			Dir *= -1
 		end
-		local lni = Y * Width
 		local XStart = if Dir == 1 then 0 else Width - 1
 		local XEnd = if Dir == 1 then Width else -1
 
 		-- cyclic shift with erasing
 		FillErrorLine(ErrorLines[1], Width)
 		table.insert(ErrorLines, table.remove(ErrorLines, 1) :: any)
+		local Index = (Y * Width) + XStart
 		local ErrorLine = ErrorLines[1]
-		local Index = lni + XStart
 
 		for X = XStart, XEnd, Dir do
 			-- Image pixel
-			local Point = pointArray[Index];
+			local R, G, B, A = ReadBufferRGBA(ImageData.Pixels[Index])
 			local Error = ErrorLine[X]
 
-			OriginalR = Point[1]
-			OriginalG = Point[2]
-			OriginalB = Point[3]
-			OriginalA = Point[4]
-
-			local CorrectedR = math.clamp(OriginalR + Error[1], 0, 255)
-			local CorrectedG = math.clamp(OriginalG + Error[2], 0, 255)
-			local CorrectedB = math.clamp(OriginalB + Error[3], 0, 255)
-			local CorrectedA = math.clamp(OriginalA + Error[4], 0, 255)
+			local CorrectedR = math.clamp(R + Error[1], 0, 255)
+			local CorrectedG = math.clamp(G + Error[2], 0, 255)
+			local CorrectedB = math.clamp(B + Error[3], 0, 255)
+			local CorrectedA = math.clamp(A + Error[4], 0, 255)
 
 			-- Reduced pixel
 			local PaletteR, PaletteG, PaletteB, PaletteA = Palette:NearestColor(
@@ -716,18 +784,21 @@ local function Dither_ErrorDiffusionArray(
 				CorrectedB,
 				CorrectedA
 			)
-			Point[1] = PaletteR
-			Point[2] = PaletteG
-			Point[3] = PaletteB
-			Point[4] = PaletteA
+
+			ImageData.Pixels[Index] = CreateColorBuffer(
+				PaletteR,
+				PaletteG,
+				PaletteB,
+				PaletteA
+			)
 
 			-- dithering strength
 			if MinimumColorDistanceToDither then 
 				local Distance = DistanceCalcuator:CalcuateNormalized(
-					OriginalR,
-					OriginalG,
-					OriginalB,
-					OriginalA,
+					R,
+					G,
+					B,
+					A,
 					PaletteR,
 					PaletteG,
 					PaletteB,
@@ -867,11 +938,8 @@ local function Dither_ErrorDiffusionRiemersma(
 
 	local HilbertCurve: HilbertCurve = setmetatable({
 		Callback = function(X, Y)
-			local P = pointArray[(X + Y) * Width]
-			local R = P[1]
-			local G = P[2]
-			local B = P[3]
-			local A = P[4]
+			local PixelIndex = (X + Y) * Width
+			local R, G, B, A = ReadBufferRGBA(ImageData.Pixels[PixelIndex])
 	
 			for Index, Weight in Weights do
 				local Error = ErrorQueue[(Index + Head) % ErrorQueueSize]
@@ -902,10 +970,12 @@ local function Dither_ErrorDiffusionRiemersma(
 		
 			-- update point
 			--p.from(quantizedPoint);
-			P[1] = QuantizedR
-			P[2] = QuantizedG
-			P[3] = QuantizedB
-			P[4] = QuantizedA
+			ImageData.Pixels[PixelIndex] = CreateColorBuffer(
+				QuantizedR,
+				QuantizedG,
+				QuantizedB,
+				QuantizedA
+			)
 		end,
 
 		Level = math.floor(math.log(math.max(Width, Height)) / math.log(2) + 1),
@@ -925,137 +995,31 @@ local function Dither_NearestColor(
 	ImageData: ImageData,
 	Palette: Palette
 )
-	local pointArray = pointContainer.getPointArray();
-
 	for Y = 1, ImageData.Height do
 		local Index = Y * ImageData.Width
 
 		for X = 1, ImageData.Width do
 			-- Image pixel
-			local Point = pointArray[Index]
+			local R, G, B, A = ReadBufferRGBA(ImageData.Pixels[Index])
 
 			-- Reduced pixel
 			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
 				DistanceCalcuator,
-				table.unpack(Point)
+				R,
+				G,
+				B,
+				A
 			)
 
-			Point[1] = QuantizedR
-			Point[2] = QuantizedG
-			Point[3] = QuantizedB
-			Point[4] = QuantizedA
+			ImageData.Pixels[Index] = CreateColorBuffer(
+				QuantizedR,
+				QuantizedG,
+				QuantizedB,
+				QuantizedA
+			)
 			Index += 1
 		end
 	end
-end
-
---------------------------------------------------------------------------------
--- Palette
---------------------------------------------------------------------------------
-
-
-  private _getNearestIndex(
-	colorDistanceCalculator: AbstractDistanceCalculator,
-	point: Point,
-  ) {
-	let idx = this._nearestPointFromCache('' + point.uint32);
-	if (idx >= 0) return idx;
-
-	let minimalDistance = Number.MAX_VALUE;
-
-	idx = 0;
-	for (let i = 0, l = this._pointArray.length; i < l; i++) {
-	  const p = this._pointArray[i];
-	  const distance = colorDistanceCalculator.calculateRaw(
-		point.r,
-		point.g,
-		point.b,
-		point.a,
-		p.r,
-		p.g,
-		p.b,
-		p.a,
-	  );
-
-	  if (distance < minimalDistance) {
-		minimalDistance = distance;
-		idx = i;
-	  }
-	}
-
-	this._i32idx[point.uint32] = idx;
-	return idx;
-  }
-
-local function GetNearestIndex(
-	Palette: Palette,
-	R: number,
-	G: number,
-	B: number,
-	A: number,
-	Uint32: number?
-)
-	local Uint32 = Uint32 or RGBAToUint32(R, G, B, A)
-	local Index = Palette.Uint32Indexs[Uint32]
-	if Index then return Index end
-	
-	local ClosestDistance = math.huge
-	local ClosestIndex
-
-	for Index, ColorBuffer in Palette.Colors do
-		-- waiting for buffer format for color buffers
-		local Distance = Palette.Calcuator:CalculateRaw(
-
-		)
-
-		if Distance < ClosestDistance then 
-			ClosestDistance = Distance
-			ClosestIndex = Index
-		end
-	end
-
-	Palette.Uint32Indexs[Uint32] = Index
-	return Index
-end
-
-
-local PalettePrototype = {}
-PalettePrototype.__index = PalettePrototype
-
-function PalettePrototype.__concat<T>(self: Palette<T>, String: string)
-	local Color = self.Colors[1]
-
-	if Color then
-		local Hex = RGBAToHex(
-			buffer.readu8(Color, 0),
-			buffer.readu8(Color, 1),
-			buffer.readu8(Color, 2),
-			buffer.readu8(Color, 3)
-		)
-
-		return `{String}{Hex}`
-	else
-		return `{String}#000000`
-	end
-end
-
-function PalettePrototype.__tostring<T>(self: Palette<T>)
-	local Color = self.Colors[1]
-
-	if Color then
-		return RGBAToHex(
-			buffer.readu8(Color, 0),
-			buffer.readu8(Color, 1),
-			buffer.readu8(Color, 2),
-			buffer.readu8(Color, 3)
-		)
-	else
-		return "#000000"
-	end
-end
-
-function PalettePrototype.__len<T>(self: Palette<T>)
-	return #self.Colors
 end
 
 /*
