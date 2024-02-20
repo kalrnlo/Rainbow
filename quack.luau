@@ -115,6 +115,7 @@ type PalettePrototype<T> = {
 }
 
 type Palette<T> = typeof(setmetatable({} :: {
+	Uint32Indexs: {number},
 	Colors: {T}
 }, {} :: PalettePrototype<T>))
 
