@@ -117,7 +117,7 @@ type DistanceFormulaDefaults = {
 type PalettePrototype = {
 	Nearest: ((self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
 		((self: Palette, Color3: Color3) -> (Color3, number)) &
-		((self: Palette>, RGBOrRGBA: {number}) -> {number}) &
+		((self: Palette, RGBOrRGBA: {number}) -> {number}) &
 		((self: Palette, buffer: buffer) -> buffer),
 		
 	-- tostring(Palette) returns the first color in the palette as a hex color string
@@ -213,7 +213,8 @@ local function RGBAToHex(R: number, G: number, B: number, A: number)
 		tonumber(R, 16),
 		tonumber(G, 16),
 		tonumber(B, 16),
-		string.sub(tonumber(math.floor(A * 255), 16) :: any, 0, 2)
+		bit32.extract(tonumber(math.floor(A * 255), 16), 0, 16),
+		string.sub(tonumber(math.floor(A * 255), 16) :: any, 0, 2),
 	} :: any
   
 	-- Pad single-digit output values
@@ -951,6 +952,72 @@ end
 --------------------------------------------------------------------------------
 -- Palette
 --------------------------------------------------------------------------------
+
+
+  private _getNearestIndex(
+	colorDistanceCalculator: AbstractDistanceCalculator,
+	point: Point,
+  ) {
+	let idx = this._nearestPointFromCache('' + point.uint32);
+	if (idx >= 0) return idx;
+
+	let minimalDistance = Number.MAX_VALUE;
+
+	idx = 0;
+	for (let i = 0, l = this._pointArray.length; i < l; i++) {
+	  const p = this._pointArray[i];
+	  const distance = colorDistanceCalculator.calculateRaw(
+		point.r,
+		point.g,
+		point.b,
+		point.a,
+		p.r,
+		p.g,
+		p.b,
+		p.a,
+	  );
+
+	  if (distance < minimalDistance) {
+		minimalDistance = distance;
+		idx = i;
+	  }
+	}
+
+	this._i32idx[point.uint32] = idx;
+	return idx;
+  }
+
+local function GetNearestIndex(
+	Palette: Palette,
+	R: number,
+	G: number,
+	B: number,
+	A: number,
+	Uint32: number?
+)
+	local Uint32 = Uint32 or RGBAToUint32(R, G, B, A)
+	local Index = Palette.Uint32Indexs[Uint32]
+	if Index then return Index end
+	
+	local ClosestDistance = math.huge
+	local ClosestIndex
+
+	for Index, ColorBuffer in Palette.Colors do
+		-- waiting for buffer format for color buffers
+		local Distance = Palette.Calcuator:CalculateRaw(
+
+		)
+
+		if Distance < ClosestDistance then 
+			ClosestDistance = Distance
+			ClosestIndex = Index
+		end
+	end
+
+	Palette.Uint32Indexs[Uint32] = Index
+	return Index
+end
+
 
 local PalettePrototype = {}
 PalettePrototype.__index = PalettePrototype
