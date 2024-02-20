@@ -119,6 +119,14 @@ type PalettePrototype = {
 		((self: Palette, Color3: Color3) -> (Color3, number)) &
 		((self: Palette, RGBOrRGBA: {number}) -> {number}) &
 		((self: Palette, buffer: buffer) -> buffer),
+	Contains: ((self: Palette, R: number, G: number, B: number, A: number?) -> boolean) &
+		((self: Palette, Color3: Color3) -> boolean) &
+		((self: Palette, RGBOrRGBA: {number}) -> boolean) &
+		((self: Palette, buffer: buffer) -> boolean),	
+	Insert: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
+		((self: Palette, Color3: Color3) -> ()) &
+		((self: Palette, RGBOrRGBA: {number}) -> ()) &
+		((self: Palette, buffer: buffer) -> ()),
 		
 	-- tostring(Palette) returns the first color in the palette as a hex color string
 	-- same with concat but part of the concatonaded string
@@ -348,6 +356,21 @@ function PalettePrototype.__concat(self: Palette, String: string)
 	else
 		return `{String}#000000`
 	end
+end
+
+function PalettePrototype.Nearest(self: Palette, color: Point)
+	return GetNearestColor(self, Color)
+end
+
+function PalettePrototype.Insert(self: Palette, color: Point)
+	table.insert(self.Colors, Color)
+end
+
+function PalettePrototype.Find(self: Palette, color: Point)
+	for (let i = this._pointArray.length - 1; i >= 0; i--) {
+	  if (color.uint32 === this._pointArray[i].uint32) return true;
+	}
+	return false;
 end
 
 function PalettePrototype.__tostring(self: Palette)
@@ -1600,9 +1623,3 @@ export class RGBQuant extends AbstractPaletteQuantizer {
 	 });
    }
  }
-
- -- how points get their unint (its a number idk why the lib uses a string, but we arent gonna be doin that)
- private _loadUINT32() {
-    this.uint32 =
-      ((this.a << 24) | (this.b << 16) | (this.g << 8) | this.r) >>> 0;
-  }
