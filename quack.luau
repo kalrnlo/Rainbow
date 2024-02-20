@@ -340,7 +340,7 @@ end
 local PalettePrototype = {}
 PalettePrototype.__index = PalettePrototype
 
-function PalettePrototype.__concat<T>(self: Palette, String: string)
+function PalettePrototype.__concat(self: Palette, String: string)
 	local Color = self.Colors[1]
 
 	if Color then
@@ -350,7 +350,7 @@ function PalettePrototype.__concat<T>(self: Palette, String: string)
 	end
 end
 
-function PalettePrototype.__tostring<T>(self: Palette)
+function PalettePrototype.__tostring(self: Palette)
 	local Color = self.Colors[1]
 
 	if Color then
@@ -360,7 +360,7 @@ function PalettePrototype.__tostring<T>(self: Palette)
 	end
 end
 
-function PalettePrototype.__len<T>(self: Palette)
+function PalettePrototype.__len(self: Palette)
 	return #self.Colors
 end
 
@@ -793,8 +793,8 @@ local function Dither_ErrorDiffusionArray(
 			local CorrectedA = math.clamp(A + Error[4], 0, 255)
 
 			-- Reduced pixel
-			local PaletteR, PaletteG, PaletteB, PaletteA = Palette:NearestColor(
-				DistanceCalcuator,
+			local PaletteR, PaletteG, PaletteB, PaletteA = GetNearestColor(
+				Palette,
 				CorrectedR,
 				CorrectedG,
 				CorrectedB,
@@ -968,8 +968,8 @@ local function Dither_ErrorDiffusionRiemersma(
 				A += Error[4] * Weight
 			end
 			-- QuantizedPoint
-			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
-				DistanceCalcuator,
+			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = GetNearestColor(
+				Palette,
 				math.clamp(R, 0, 255),
 				math.clamp(G, 0, 255),
 				math.clamp(B, 0, 255),
@@ -1023,8 +1023,8 @@ local function Dither_NearestColor(
 			local R, G, B, A = ReadBufferRGBA(ColorBuffer)
 
 			-- Reduced pixel
-			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = Palette:NearestColor(
-				DistanceCalcuator,
+			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = GetNearestColor(
+				Palette,
 				R,
 				G,
 				B,
