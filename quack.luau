@@ -18,6 +18,8 @@ local Image2 = Quack.ExtractData(EditableImage)
 local Image3 = Quack.ExtractData(EditableImage)
 Quack.ExtractDataFor(EditableImage1, EditableImage2, EditableImage3)
 
+Quack.Calcuator("Manhattan", 255, 255, 255, 0)
+
 Quack.PalletizeAsync(table.pack(Image1, Image2, Image3), {
 	DitheringMethod = "FloydSteinberg",
 	DistanceFormula = "Manhattan",
@@ -258,7 +260,7 @@ local function ExtractData(Data: {Color3} | EditableImage)
     end
 end
 
-local F64Tou32 = bit32.band
+local f64Tou32 = bit32.band
 
 --------------------------------------------------------------------------------
 -- Distance
@@ -401,62 +403,62 @@ local Calcuators: {
 } = {
     Manhattan = {
         CalculateRaw = CalcuateRaw_Manhattan,
-        Defualts = {
+        Defualts = table.freeze({
             KR = 1,
             KG = 1,
             KB = 1,
             KA = 1,
-        },
+        }),
     },
     -- Manhattan distance (Nommyde modification)
     -- https://github.com/igor-bezkrovny/image-quantization/issues/4#issuecomment-235155320
     ManhattanNommyde = {
         CalculateRaw = CalcuateRaw_Manhattan,
-        Defualts = {
+        Defualts = table.freeze({
             KR = 0.4984,
             KG = 0.8625,
             KB = 0.2979,
             -- TODO: what is the best coefficient below?
             KA = 1,
-        },
+        }),
     },
     -- Manhattan distance (sRGB coefficients)
     ManhattanBT709 = {
         CalculateRaw = CalcuateRaw_Manhattan,
-        Defualts = {
+        Defualts = table.freeze({
             KR = BT709.Y.RED,
             KG = BT709.Y.GREEN,
             KB = BT709.Y.BLUE,
             -- TODO: what is the best coefficient below?
             KA = 1,
-        },
+        }),
     },
     Euclidean = {
         CalculateRaw = CalcuateRaw_Euclidean,
-        Defualts = {
+        Defualts = table.freeze({
             KR = 1,
             KG = 1,
             KB = 1,
             KA = 1,
-        },
+        }),
     },
     -- Euclidean color distance (RGBQuant modification w Alpha)
     EuclideanBT709 = {
         CalculateRaw = CalcuateRaw_Euclidean,
-        Defualts = {
+        Defualts = table.freeze({
 			KR = BT709.Y.RED,
             KG = BT709.Y.GREEN,
             KB = BT709.Y.BLUE,
             KA = 1,
-        },
+        }),
     },
     PNGQuant = {
         CalcuateRaw = CalcuateRaw_PNGQuant,
-        Defualts = {} :: any,
+        Defualts = table.freeze({}) :: any,
     },
     CMetric = {
         CalculateRaw = CalcuateRaw_CMetric,
-        Defualts = {} :: any,
+        Defualts = table.freeze({}) :: any,
     },
 }
 
