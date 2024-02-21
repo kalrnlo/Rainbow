@@ -396,8 +396,14 @@ local function GetNearestColor(
 	G: number,
 	B: number,
 	A: number
-)
-	return Palette.Colors[GetNearestIndex(Palette, R, G, B, A)] or nil
+): ((number, number, number, number, number)?)
+	local Color = Palette.Colors[GetNearestIndex(Palette, R, G, B, A)]
+
+	if Color then 
+		return ReadBufferRGBA(Color), ReadBufferUint32(Color)
+	else
+		return nil
+	end
 end
 
 local PalettePrototype = {}
@@ -407,14 +413,18 @@ function PalettePrototype.Contains(self: Palette, Value: any, G: number?, B: num
 	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
 
 	for _, ColorBuffer in self.Colors do
-		if ReadBufferUint32(ColorBuffer) == Uint32 then return true end
+		if ReadBufferUint32(ColorBuffer) == Uint32 then 
+			return true 
+		end
 	end
-
 	return false
 end
 
+-- TODO: make this return in the format the user used ie if the user put in a color3,
+-- this returns a color3
 function PalettePrototype.Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	return GetNearestColor(self, GetRGBA(Value, G, B, A))
+	local R, G, B, A = GetNearestColor(self, GetRGBA(Value, G, B, A))
+	return R, G, B, A
 end
 
 function PalettePrototype.Insert(self: Palette, Value: any, G: number?, B: number?, A: number?)
@@ -448,31 +458,37 @@ end
 -- TODO: group very low lum and very high lum colors
 -- TODO: pass custom sort order
 -- TODO: sort criteria function should be placed to HueStats class
+-- note: > 0 is basically how you convert js sort to lua easily
+-- its what robloxs luau polyfill does for its array.sort
 function PalettePrototype.Sort(self: Palette)
 	table.clear(self.Uint32Indexs)
 
 	table.sort(self.Colors, function(A, B)
-		const hslA = rgb2hsl(a.r, a.g, a.b);
-		const hslB = rgb2hsl(b.r, b.g, b.b);
+		local AR, AG, AB, AA = ReadBufferRGBA(A)
+		local BR, BG, BB, BA = ReadBufferRGBA(B)
+		local AH, AS, AL = RGBToHSL(AR, AG, AB)
+		local BH, BS, BL = RGBToHSL(BR, BG, BB)
 	
 		-- sort all grays + whites together
-		const hueA =
-		  a.r === a.g && a.g === a.b ? 0 : 1 + hueGroup(hslA.h, hueGroups);
-		const hueB =
-		  b.r === b.g && b.g === b.b ? 0 : 1 + hueGroup(hslB.h, hueGroups);
+		local HueA = if AR == AG and AG == AB then 0 else 1 + HueGroup(AH, HueGroups)
+		local HueB = if BR == BG and BG == BB then 0 else 1 + HueGroup(BH, HueGroups)
+		local HueDiff = HueB - HueA
 	
-		const hueDiff = hueB - hueA;
-		if (hueDiff) return -hueDiff;
-	
-		const lA = a.getLuminosity(true);
-		const lB = b.getLuminosity(true);
-	
-		if (lB - lA !== 0) return lB - lA;
-	
-		const satDiff = ((hslB.s * 100) | 0) - ((hslA.s * 100) | 0);
-		if (satDiff) return -satDiff;
-	
-		return 0;
+		if HueDiff > 0 then return -HueDiff > 0 end
+		local LumA = GetRGBALuminosity(AR, AG, AB, AA)
+		local LumB = GetRGBALuminosity(BR, BG, BB, BA)
+		local LumDiff = LumB - LumA
+
+		if LumDiff ~= 0 then return LumDiff > 0
+		local ASat = AS * 100
+		local BSat = BS * 100
+		local SatDiff = (if BSat > 0 then BSat else 0) - (if ASat > 0 then ASat else 0)
+
+		if SatDiff > 0 then
+			return -SatDiff > 0
+		else
+			return false
+		end
 	end)
 end
 
