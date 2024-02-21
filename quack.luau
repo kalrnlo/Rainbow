@@ -248,59 +248,6 @@ local function RGBToHSL(R: number, G: number, B: number)
 	return H, S, L
 end
 
-local function CreateColorBuffer(R: number, G: number, B: number, A: number)
-	local Buffer = buffer.create(8)
-	buffer.writeu8(Buffer, 0, R)
-	buffer.writeu8(Buffer, 1, G)
-	buffer.writeu8(Buffer, 2, B)
-	buffer.writeu8(Buffer, 3, A)
-	buffer.writeu32(Buffer, 4, RGBAToUint32(R, G, B, A))
-	return Buffer
-end
-
-local function ReadBufferUint32(Buffer: buffer)
-	return buffer.readu32(Buffer, 4)
-end
-
-local function ReadBufferRGBA(Buffer: buffer)
-	return buffer.readu8(Buffer, 0), buffer.readu8(Buffer, 1),
-		buffer.readu8(Buffer, 2), buffer.readu8(Buffer, 3)
-end
-
-local function OverwriteColorBuffer(
-	Buffer: buffer,
-	R: number,
-	G: number,
-	B: number,
-	A: number,
-	Uint32: number?
-)
-	buffer.writeu8(Buffer, 0, R)
-	buffer.writeu8(Buffer, 1, G)
-	buffer.writeu8(Buffer, 2, B)
-	buffer.writeu8(Buffer, 3, A)
-	buffer.writeu32(Buffer, 4, Uint32 or RGBAToUint32(R, G, B, A))
-	return Buffer
-end
-
-local function ExtractData(Data: {Color3} | EditableImage)
-    if typeof(Data) == "Instance" then
-        return EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
-    elseif #Data > 0 then
-        local NewData = table.create(#Data * 4, 0)
-
-        for Index, Color3 in Data do
-            local NewIndex = if Index ~= 1 then Index * 4 else 1
-            NewData[NewIndex] = math.clamp((Color3.R * 255), 0, 255)
-            NewData[NewIndex + 1] = math.clamp((Color3.G * 255), 0, 255)
-            NewData[NewIndex + 2] = math.clamp((Color3.B * 255), 0, 255)
-        end
-        return NewData
-    else
-        error("[Quack] Extract data failed, array provided may have had 0 indexs")
-    end
-end
-
 local function FormatRGBA(RGBAType: RGBAType, R: number, G: number, B: number, A: number): any
 	if RGBAType == "number" then
 		return R, G, B, A
@@ -321,6 +268,24 @@ local function FormatRGBA(RGBAType: RGBAType, R: number, G: number, B: number, A
 		buffer.writeu8(RGBABuffer, 3, A)
 		return RGBABuffer
 	end
+end
+
+local function ExtractData(Data: {Color3} | EditableImage)
+    if typeof(Data) == "Instance" then
+        return EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
+    elseif #Data > 0 then
+        local NewData = table.create(#Data * 4, 0)
+
+        for Index, Color3 in Data do
+            local NewIndex = if Index ~= 1 then Index * 4 else 1
+            NewData[NewIndex] = math.clamp((Color3.R * 255), 0, 255)
+            NewData[NewIndex + 1] = math.clamp((Color3.G * 255), 0, 255)
+            NewData[NewIndex + 2] = math.clamp((Color3.B * 255), 0, 255)
+        end
+        return NewData
+    else
+        error("[Quack] Extract data failed, array provided may have had 0 indexs")
+    end
 end
 
 local function GetRGBA(
@@ -374,11 +339,68 @@ local function GetRGBA(
 end
 
 local f64ToUint32 = bit32.band
-local HueGroups = 10
+
+--------------------------------------------------------------------------------
+-- Color Buffer
+--------------------------------------------------------------------------------
+
+local function ColorBufferAlloc(ColorBuffer: buffer, Index: number)
+	local OldLength = buffer.len(ColorBuffer)
+	local NewLength = Index + 8
+
+	if OldLength < NewLength then
+		local NewBuffer = buffer.create(math.ceil(OldLength ^ 1.5))
+		buffer.copy(NewBuffer, 0, ColorBuffer)
+		return NewBuffer
+	else
+		return ColorBuffer
+	end
+end
+
+local function ColorBufferReadUint32(ColorBuffer: buffer, Index: number)
+	local NewIndex = Index * 8
+
+	if buffer.len(ColorBuffer) < NewIndex + 8 then
+		return 0
+	else
+		return buffer.readu32(Buffer, NewIndex + 4)
+	end
+end
+
+local function ColorBufferReadRGBA(ColorBuffer: buffer, Index: number)
+	local NewIndex = Index * 8
+
+	if buffer.len(ColorBuffer) < NewIndex + 8 then
+		return 0, 0, 0, 0
+	else
+		return buffer.readu8(ColorBuffer, NewIndex), buffer.readu8(ColorBuffer, NewIndex + 1),
+			buffer.readu8(ColorBuffer, NewIndex + 2), buffer.readu8(ColorBuffer, NewIndex + 3)
+	end
+end
+
+local function ColorBufferWrite(
+	ColorBuffer: buffer,
+	Index: number,
+	R: number,
+	G: number,
+	B: number,
+	A: number
+)
+	local NewIndex = Index * 8
+	local Buffer = ColorBufferAlloc(ColorBuffer, NewIndex)
+	buffer.writeu8(Buffer, NewIndex, R)
+	buffer.writeu8(Buffer, NewIndex + 1, G)
+	buffer.writeu8(Buffer, NewIndex + 2, B)
+	buffer.writeu8(Buffer, NewIndex + 3, A)
+	buffer.writeu32(Buffer, NewIndex + 4, RGBAToUint32(R, G, B, A))
+	return Buffer
+end
 
 --------------------------------------------------------------------------------
 -- Palette
 --------------------------------------------------------------------------------
+
+local HueGroups = 10
 
 local function HueGroup(Hue: number, Segments: number)
 	local LoopSegments = 360 / Segments
