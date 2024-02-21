@@ -248,13 +248,13 @@ local function RGBToHSL(R: number, G: number, B: number)
 	return H, S, L
 end
 
-local function CreateColorBuffer(R: number, G: number, B: number, A: number, Uint32: number?)
+local function CreateColorBuffer(R: number, G: number, B: number, A: number)
 	local Buffer = buffer.create(8)
 	buffer.writeu8(Buffer, 0, R)
 	buffer.writeu8(Buffer, 1, G)
 	buffer.writeu8(Buffer, 2, B)
 	buffer.writeu8(Buffer, 3, A)
-	buffer.writeu32(Buffer, 4, Uint32 or RGBAToUint32(R, G, B, A))
+	buffer.writeu32(Buffer, 4, RGBAToUint32(R, G, B, A))
 	return Buffer
 end
 
@@ -347,9 +347,9 @@ local function GetRGBA(
 			error("[Quack] buffer provided does not have length of either 3 or 4++")
 		end
 	elseif typeof(Value) == "Color3" then
-		return math.clamp((Color3.R * 255), 0, 255),
-			math.clamp((Color3.G * 255), 0, 255),
-			math.clamp((Color3.B * 255), 0, 255),
+		return math.clamp(math.ceil(Color3.R * 255), 0, 255),
+			math.clamp(math.ceil(Color3.G * 255), 0, 255),
+			math.clamp(math.ceil(Color3.B * 255), 0, 255),
 			0,
 			typeof(Value)
 	elseif typeof(Value) == "table" then
@@ -461,7 +461,7 @@ function PalettePrototype.Nearest(self: Palette, Value: any, G: number?, B: numb
 	return FormatRGBA(RGBAType ,GetNearestColor(self, NewR, NewG, NewB, NewA))
 end
 
-function PalettePrototype.Insert(self: Palette, Value: any, G: number?, B: number?, A: number?)
+function PalettePrototype.Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	table.insert(self.Colors, CreateColorBuffer(GetRGBA(Value, G, B, A)))
 end
 
