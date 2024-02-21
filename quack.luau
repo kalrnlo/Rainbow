@@ -344,6 +344,16 @@ local f64ToUint32 = bit32.band
 -- Color Buffer
 --------------------------------------------------------------------------------
 
+local function ColorBufferReadUint32(ColorBuffer: buffer, Index: number)
+	local NewIndex = Index * 8
+
+	if buffer.len(ColorBuffer) < NewIndex + 8 then
+		return 0
+	else
+		return buffer.readu32(Buffer, NewIndex + 4)
+	end
+end
+
 local function ColorBufferAlloc(ColorBuffer: buffer, Index: number)
 	local OldLength = buffer.len(ColorBuffer)
 	local NewLength = Index + 8
@@ -354,16 +364,6 @@ local function ColorBufferAlloc(ColorBuffer: buffer, Index: number)
 		return NewBuffer
 	else
 		return ColorBuffer
-	end
-end
-
-local function ColorBufferReadUint32(ColorBuffer: buffer, Index: number)
-	local NewIndex = Index * 8
-
-	if buffer.len(ColorBuffer) < NewIndex + 8 then
-		return 0
-	else
-		return buffer.readu32(Buffer, NewIndex + 4)
 	end
 end
 
