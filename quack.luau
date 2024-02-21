@@ -214,7 +214,7 @@ local function RGBAToUint32(R: number, G: number, B: number, A: number)
 	)
  end
 
-local function RGBAToHex(R: number, G: number, B: number, A: number)
+local function RGBAToHex(R: number, G: number, B: number, A: number?)
 	--return string.format("#%02X%02X%02X%02X", R, G, B, math.clamp(math.floor(A * 255), 0, 255))
 	return string.format("#%02X%02X%02X", R, G, B)
 end
@@ -348,6 +348,45 @@ end
 local PalettePrototype = {}
 PalettePrototype.__index = PalettePrototype
 
+-- TODO: group very low lum and very high lum colors
+-- TODO: pass custom sort order
+-- TODO: sort criteria function should be placed to HueStats class
+sort() {
+  this._i32idx = {};
+  this._pointArray.sort((a: Point, b: Point) => {
+	const hslA = rgb2hsl(a.r, a.g, a.b);
+	const hslB = rgb2hsl(b.r, b.g, b.b);
+
+	// sort all grays + whites together
+	const hueA =
+	  a.r === a.g && a.g === a.b ? 0 : 1 + hueGroup(hslA.h, hueGroups);
+	const hueB =
+	  b.r === b.g && b.g === b.b ? 0 : 1 + hueGroup(hslB.h, hueGroups);
+	/*
+	 var hueA = (a.r === a.g && a.g === a.b) ? 0 : 1 + Utils.hueGroup(hslA.h, hueGroups);
+	 var hueB = (b.r === b.g && b.g === b.b) ? 0 : 1 + Utils.hueGroup(hslB.h, hueGroups);
+	 */
+
+	const hueDiff = hueB - hueA;
+	if (hueDiff) return -hueDiff;
+
+	/*
+	 var lumDiff = Utils.lumGroup(+hslB.l.toFixed(2)) - Utils.lumGroup(+hslA.l.toFixed(2));
+	 if (lumDiff) return -lumDiff;
+	 */
+	const lA = a.getLuminosity(true);
+	const lB = b.getLuminosity(true);
+
+	if (lB - lA !== 0) return lB - lA;
+
+	const satDiff = ((hslB.s * 100) | 0) - ((hslA.s * 100) | 0);
+	if (satDiff) return -satDiff;
+
+	return 0;
+  });
+}
+}
+
 function PalettePrototype.__concat(self: Palette, String: string)
 	local Color = self.Colors[1]
 
@@ -385,6 +424,10 @@ end
 
 function PalettePrototype.__len(self: Palette)
 	return #self.Colors
+end
+
+function PalettePrototype.Sort(self: Palette)
+	
 end
 
 --------------------------------------------------------------------------------
@@ -1509,117 +1552,4 @@ export class RGBQuant extends AbstractPaletteQuantizer {
 	 if (hue >= mid && hue < mid + seg) return i;
    }
    return 0;
- }
- 
- export class Palette {
-   private readonly _pointContainer: PointContainer;
-   private readonly _pointArray: Point[] = [];
-   private _i32idx: { [key: string]: number } = {};
- 
-   constructor() {
-	 this._pointContainer = new PointContainer();
-	 this._pointContainer.setHeight(1);
-	 this._pointArray = this._pointContainer.getPointArray();
-   }
- 
-   add(color: Point) {
-	 this._pointArray.push(color);
-	 this._pointContainer.setWidth(this._pointArray.length);
-   }
- 
-   has(color: Point) {
-	 for (let i = this._pointArray.length - 1; i >= 0; i--) {
-	   if (color.uint32 === this._pointArray[i].uint32) return true;
-	 }
- 
-	 return false;
-   }
- 
-   // TOTRY: use HUSL - http://boronine.com/husl/ http://www.husl-colors.org/ https://github.com/husl-colors/husl
-   getNearestColor(
-	 colorDistanceCalculator: AbstractDistanceCalculator,
-	 color: Point,
-   ) {
-	 return this._pointArray[
-	   this._getNearestIndex(colorDistanceCalculator, color) | 0
-	 ];
-   }
-
- 
-   private _nearestPointFromCache(key: string) {
-	 return typeof this._i32idx[key] === 'number' ? this._i32idx[key] : -1;
-   }
- 
-   private _getNearestIndex(
-	 colorDistanceCalculator: AbstractDistanceCalculator,
-	 point: Point,
-   ) {
-	 let idx = this._nearestPointFromCache('' + point.uint32);
-	 if (idx >= 0) return idx;
- 
-	 let minimalDistance = Number.MAX_VALUE;
- 
-	 idx = 0;
-	 for (let i = 0, l = this._pointArray.length; i < l; i++) {
-	   const p = this._pointArray[i];
-	   const distance = colorDistanceCalculator.calculateRaw(
-		 point.r,
-		 point.g,
-		 point.b,
-		 point.a,
-		 p.r,
-		 p.g,
-		 p.b,
-		 p.a,
-	   );
- 
-	   if (distance < minimalDistance) {
-		 minimalDistance = distance;
-		 idx = i;
-	   }
-	 }
- 
-	 this._i32idx[point.uint32] = idx;
-	 return idx;
-   }
- 
-
- 
-   // TODO: group very low lum and very high lum colors
-   // TODO: pass custom sort order
-   // TODO: sort criteria function should be placed to HueStats class
-   sort() {
-	 this._i32idx = {};
-	 this._pointArray.sort((a: Point, b: Point) => {
-	   const hslA = rgb2hsl(a.r, a.g, a.b);
-	   const hslB = rgb2hsl(b.r, b.g, b.b);
- 
-	   // sort all grays + whites together
-	   const hueA =
-		 a.r === a.g && a.g === a.b ? 0 : 1 + hueGroup(hslA.h, hueGroups);
-	   const hueB =
-		 b.r === b.g && b.g === b.b ? 0 : 1 + hueGroup(hslB.h, hueGroups);
-	   /*
-		var hueA = (a.r === a.g && a.g === a.b) ? 0 : 1 + Utils.hueGroup(hslA.h, hueGroups);
-		var hueB = (b.r === b.g && b.g === b.b) ? 0 : 1 + Utils.hueGroup(hslB.h, hueGroups);
-		*/
- 
-	   const hueDiff = hueB - hueA;
-	   if (hueDiff) return -hueDiff;
- 
-	   /*
-		var lumDiff = Utils.lumGroup(+hslB.l.toFixed(2)) - Utils.lumGroup(+hslA.l.toFixed(2));
-		if (lumDiff) return -lumDiff;
-		*/
-	   const lA = a.getLuminosity(true);
-	   const lB = b.getLuminosity(true);
- 
-	   if (lB - lA !== 0) return lB - lA;
- 
-	   const satDiff = ((hslB.s * 100) | 0) - ((hslA.s * 100) | 0);
-	   if (satDiff) return -satDiff;
- 
-	   return 0;
-	 });
-   }
  }
