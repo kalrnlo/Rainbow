@@ -301,6 +301,28 @@ local function ExtractData(Data: {Color3} | EditableImage)
     end
 end
 
+local function FormatRGBA(RGBAType: RGBAType, R: number, G: number, B: number, A: number): any
+	if RGBAType == "number" then
+		return R, G, B, A
+	elseif RGBAType == "Color3" then
+		return Color3.fromRGB(R, G, B), A
+	elseif RGBAType == "table" then
+		local RGBATable = table.create(4)
+		RGBATable[1] = R
+		RGBATable[1] = G
+		RGBATable[1] = B
+		RGBATable[1] = A
+		return RGBATable
+	else
+		local RGBABuffer = buffer.create(4)
+		buffer.writeu8(RGBABuffer, 0, R)
+		buffer.writeu8(RGBABuffer, 1, G)
+		buffer.writeu8(RGBABuffer, 2, B)
+		buffer.writeu8(RGBABuffer, 3, A)
+		return RGBABuffer
+	end
+end
+
 local function GetRGBA(
 	Value: number | buffer | Color3 | {number},
 	G: number?,
@@ -385,19 +407,21 @@ local function GetNearestIndex(
 	if Index then return Index end
 	
 	local ClosestDistance = math.huge
+	local ClosestBuffer
 	local ClosestIndex
 
 	for Index, ColorBuffer in Palette.Colors do
 		local Distance = Palette.Calcuator:CalculateRaw(R, G, B, A, ReadBufferRGBA(ColorBuffer))
 
 		if Distance < ClosestDistance then 
+			ClosestBuffer = ColorBuffer
 			ClosestDistance = Distance
 			ClosestIndex = Index
 		end
 	end
 
 	Palette.Uint32Indexs[Uint32] = Index
-	return Index
+	return Index, ClosestBuffer
 end
 
 local function GetNearestColor(
@@ -406,13 +430,13 @@ local function GetNearestColor(
 	G: number,
 	B: number,
 	A: number
-): ((number, number, number, number, number)?)
-	local Color = Palette.Colors[GetNearestIndex(Palette, R, G, B, A)]
+)
+	local _, ColorBuffer = GetNearestIndex(Palette, R, G, B, A)
 
-	if Color then 
-		return ReadBufferRGBA(Color), ReadBufferUint32(Color)
+	if ColorBuffer then 
+		return ReadBufferRGBA(ColorBuffer)
 	else
-		return nil
+		return 0, 0, 0, 0
 	end
 end
 
@@ -433,12 +457,12 @@ end
 -- TODO: make this return in the format the user used ie if the user put in a color3,
 -- this returns a color3
 function PalettePrototype.Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	local R, G, B, A = GetNearestColor(self, GetRGBA(Value, G, B, A))
-	return R, G, B, A
+	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
+	return FormatRGBA(RGBAType ,GetNearestColor(self, NewR, NewG, NewB, NewA))
 end
 
 function PalettePrototype.Insert(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	table.insert(self.Colors, GetRGBA(Value, G, B, A))
+	table.insert(self.Colors, CreateColorBuffer(GetRGBA(Value, G, B, A)))
 end
 
 function PalettePrototype.__concat(self: Palette, String: string)
