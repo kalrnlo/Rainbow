@@ -16,7 +16,6 @@
 local Image1 = Quant.ExtractData(EditableImage)
 local Image2 = Quack.ExtractData(EditableImage)
 local Image3 = Quack.ExtractData(EditableImage)
-Quack.ExtractDataFor(EditableImage1, EditableImage2, EditableImage3)
 
 Quack.Calcuator("Manhattan", 255, 255, 255, 0)
 
@@ -30,22 +29,22 @@ end)
 local ImageData = Quack.Dither("FloydSteinberg", Palette, {Image, Image2})
 local ImageData = Quack.Dither("FloydSteinberg", Palette, Image)
 
-local Palette = Quack.Palettize(Image, {
-	DistanceFormula = "Manhattan",
-	Colors = 256
-})
-
-local Palette = Quack.QuantizeAsync(Image, {
+local Palette, ImageData = Quack.QuantizeAsync(Image, {
 	DitheringMethod = "FloydSteinberg",
 	DistanceFormula = "Manhattan",
 	Method = "GlobalPopulation",
 	Colors = 256
 }):Await()
 
-local Palette = Quack.Quantize(Image, {
+local Palette, ImageData = Quack.Quantize(Image, {
 	DitheringMethod = "FloydSteinberg",
 	DistanceFormula = "Manhattan",
 	Method = "GlobalPopulation",
+	Colors = 256
+})
+
+local Palette = Quack.Palettize(Image, {
+	DistanceFormula = "Manhattan",
 	Colors = 256
 })
 --]]
@@ -311,7 +310,10 @@ local function GetRGBA(
 	if typeof(Value) == "number" and G and B and A then
 		return R, G, B, A
 	elseif typeof(Value) == "buffer" then
-		if buffer.len(Value) == 4 then
+		-- ColorBuffers in Palette.Colors are 8 bytes
+		-- so allowing it to be greater than 4 is so someone could
+		-- use a ColorBuffer without it erroring
+		if buffer.len(Value) >= 4 then
 			return ReadBufferRGBA(Value)
 		elseif buffer.len(Value) == 3 then
 			return buffer.readu8(Value, 0), 
