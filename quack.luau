@@ -258,13 +258,13 @@ local function CreateColorBuffer(R: number, G: number, B: number, A: number, Uin
 	return Buffer
 end
 
-local function ReadBufferUint32(PaletteBuffer: buffer)
-	return buffer.readu32(ColorBuffer, 4)
+local function ReadBufferUint32(Buffer: buffer)
+	return buffer.readu32(Buffer, 4)
 end
 
 local function ReadBufferRGBA(Buffer: buffer)
-	return buffer.readu8(ColorBuffer, 0), buffer.readu8(ColorBuffer, 1),
-		buffer.readu8(ColorBuffer, 2), buffer.readu8(ColorBuffer, 3)
+	return buffer.readu8(Buffer, 0), buffer.readu8(Buffer, 1),
+		buffer.readu8(Buffer, 2), buffer.readu8(Buffer, 3)
 end
 
 local function OverwriteColorBuffer(
