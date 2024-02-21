@@ -342,10 +342,25 @@ local function GetRGBA(
 end
 
 local f64ToUint32 = bit32.band
+local HueGroups = 10
 
 --------------------------------------------------------------------------------
 -- Palette
 --------------------------------------------------------------------------------
+
+local function HueGroup(Hue: number, Segments: number)
+	local LoopSegments = 360 / Segments
+	local Half = LoopSegments / 2
+	local Mid = LoopSegments - Half
+
+	for Index = 1, LoopSegments do
+		if Hue >= Mid and Hue < (Mid + LoopSegments) then 
+			return Index
+		end
+		Mid += LoopSegments
+	end
+	return 0
+end
 
 local function GetNearestIndex(
 	Palette: Palette,
@@ -1036,7 +1051,6 @@ local function Dither_ErrorDiffusionRiemersma(
 	local ErrorQueueSize = ErrorQueueSize or 16
 
 	local Multiplier = math.exp(math.log(ErrorQueueSize) / (ErrorQueueSize - 1))
-	local pointArray = pointContainer.getPointArray();
 	local ErrorQueue = table.create(ErrorQueueSize)
 	local Weights = table.create(ErrorQueueSize)
 	local Height = ImageData.Height
@@ -1549,38 +1563,3 @@ export class RGBQuant extends AbstractPaletteQuantizer {
     palette.sort();
   }
 }
-
-/*
- * Copyright (c) 2015, Leon Sorokin
- * All rights reserved. (MIT Licensed)
- *
- * RGBQuant.js - an image quantization lib
- */
-
-/**
- * @preserve
- * Copyright 2015-2018 Igor Bezkrovnyi
- * All rights reserved. (MIT Licensed)
- *
- * palette.ts - part of Image Quantization Library
- */
-
- import { Point } from './point';
- import { PointContainer } from './pointContainer';
- import { AbstractDistanceCalculator } from '../distance/distanceCalculator';
- import { rgb2hsl } from '../conversion/rgb2hsl';
- 
- // TODO: make paletteArray via pointContainer, so, export will be available via pointContainer.exportXXX
- 
- const hueGroups = 10;
- 
- export function hueGroup(hue: number, segmentsNumber: number) {
-   const maxHue = 360;
-   const seg = maxHue / segmentsNumber;
-   const half = seg / 2;
- 
-   for (let i = 1, mid = seg - half; i < segmentsNumber; i++, mid += seg) {
-	 if (hue >= mid && hue < mid + seg) return i;
-   }
-   return 0;
- }
