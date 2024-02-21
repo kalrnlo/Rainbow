@@ -318,17 +318,11 @@ local function GetRGBA(
 			0,
 			typeof(Value)
 	elseif typeof(Value) == "table" then
-		if #Value == 4 then
+		if #Value >= 3 then
 			return Value[1],
 				Value[2],
 				Value[3],
-				Value[4],
-				typeof(Value)
-		elseif #Value == 3 then
-			return Value[1],
-				Value[2],
-				Value[3],
-				0,
+				Value[4] or 0,
 				typeof(Value)
 		else
 			error("[Quack] Table is not of valid lengths 3 or 4")
@@ -416,20 +410,6 @@ local function HueGroup(Hue: number, Segments: number)
 	return 0
 end
 
-local function PaletteWrite(
-	Palette: Palette,
-	Index: number,
-	R: number,
-	G: number,
-	B: number,
-	A: number
-)
-	local NewBuffer = ColorBufferWrite(Palette.Colors, Index, R, G, B, A)
-	if NewBuffer ~= Palette.Colors then 
-		Palette.Colors = NewBuffer
-	end
-end
-
 local function GetNearestIndex(
 	Calcuator: DistanceCalcuator,
 	Palette: Palette,
@@ -511,14 +491,11 @@ end
 function PalettePrototype.Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	self.ColorCount += 1
 
-	local NewBuffer = ColorBufferWrite(
+	self.Colors = ColorBufferWrite(
 		self.Colors,
 		self.ColorCount,
 		GetRGBA(Value, G, B, A)
 	)
-	if NewBuffer ~= self.Colors then 
-		self.Colors = NewBuffer
-	end
 end
 
 function PalettePrototype.__concat(self: Palette, String: string)
@@ -943,7 +920,7 @@ end
 -- fixed version. it doesn't use image pixels as error storage, also it doesn't have 0.3 + 0.3 + 0.3 + 0.3 = 0 error
 -- Mutates ImageData
 local function Dither_ErrorDiffusionArray(
-	DistanceCalcuator: DistanceCalcuator,
+	Calcuator: DistanceCalcuator,
 	ImageData: ImageData,
 	Palette: Palette,
 	DitheringMethod: DitheringMethod,
@@ -1009,32 +986,17 @@ local function Dither_ErrorDiffusionArray(
 
 			-- Reduced pixel
 			local PaletteR, PaletteG, PaletteB, PaletteA = GetNearestColor(
-				Palette,
-				CorrectedR,
-				CorrectedG,
-				CorrectedB,
-				CorrectedA
+				Palette, CorrectedR, CorrectedG, CorrectedB, CorrectedA
 			)
 
 			ImageData.Pixels[Index] = OverwriteColorBuffer(
-				ColorBuffer,
-				PaletteR,
-				PaletteG,
-				PaletteB,
-				PaletteA
+				ColorBuffer, PaletteR, PaletteG, PaletteB, PaletteA
 			)
 
 			-- dithering strength
 			if MinimumColorDistanceToDither then 
-				local Distance = DistanceCalcuator:CalcuateNormalized(
-					R,
-					G,
-					B,
-					A,
-					PaletteR,
-					PaletteG,
-					PaletteB,
-					PaletteA
+				local Distance = Calcuator:CalcuateNormalized(
+					R, G, B, A, PaletteR, PaletteG, PaletteB, PaletteA
 				)
 				if Distance < MinimumColorDistanceToDither then continue end
 			end
@@ -1183,10 +1145,7 @@ local function Dither_ErrorDiffusionRiemersma(
 			end
 			-- QuantizedPoint
 			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = GetNearestColor(
-				Palette,
-				math.clamp(R, 0, 255),
-				math.clamp(G, 0, 255),
-				math.clamp(B, 0, 255),
+				Palette, math.clamp(R, 0, 255), math.clamp(G, 0, 255), math.clamp(B, 0, 255), 
 				math.clamp(A, 0, 255)
 			)
 		
@@ -1203,11 +1162,7 @@ local function Dither_ErrorDiffusionRiemersma(
 			-- update point
 			--p.from(quantizedPoint);
 			ImageData.Pixels[PixelIndex] = OverwriteColorBuffer(
-				ColorBuffer,
-				QuantizedR,
-				QuantizedG,
-				QuantizedB,
-				QuantizedA
+				ColorBuffer, QuantizedR, QuantizedG, QuantizedB, QuantizedA
 			)
 		end,
 
@@ -1234,23 +1189,10 @@ local function Dither_NearestColor(
 		for X = 1, ImageData.Width do
 			-- Image pixel
 			local ColorBuffer = ImageData.Pixels[Index]
-			local R, G, B, A = ReadBufferRGBA(ColorBuffer)
 
 			-- Reduced pixel
-			local QuantizedR, QuantizedG, QuantizedB, QuantizedA = GetNearestColor(
-				Palette,
-				R,
-				G,
-				B,
-				A
-			)
-
 			ImageData.Pixels[Index] = OverwriteColorBuffer(
-				ColorBuffer,
-				QuantizedR,
-				QuantizedG,
-				QuantizedB,
-				QuantizedA
+				ColorBuffer, GetNearestColor(Palette, ReadBufferRGBA(ColorBuffer))
 			)
 			Index += 1
 		end
