@@ -60,7 +60,7 @@ type DistanceFormula = "Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" 
 
 type Method = "GlobalPopulation" | "SubRegionPopulation"
 
-type ReturnAs = "buffer" | "table" | "Color3" 
+type RGBAType = "buffer" | "table" | "Color3" | "number"
 
 type Palletize = ((Image: ImageData, Options: PalletizeInfo) -> Palette<{}>) &
 	((Images: {ImageData}, Options: PalletizeInfo) -> Palette<{}>) &
@@ -306,9 +306,9 @@ local function GetRGBA(
 	G: number?,
 	B: number?,
 	A: number?
-): (number, number, number, number)
+): (number, number, number, number, RGBAType)
 	if typeof(Value) == "number" and G and B and A then
-		return R, G, B, A
+		return R, G, B, A, typeof(Value)
 	elseif typeof(Value) == "buffer" then
 		-- ColorBuffers in Palette.Colors are 8 bytes
 		-- so allowing it to be greater than 4 is so someone could
@@ -319,25 +319,35 @@ local function GetRGBA(
 			return buffer.readu8(Value, 0), 
 				buffer.readu8(Value, 1),
 				buffer.readu8(Value, 2), 
-				0
+				0,
+				typeof(Value)
 		else
-			error("[Quack] buffer provided is not in RGBA or RGB format")
+			error("[Quack] buffer provided does not have length of either 3 or 4++")
 		end
 	elseif typeof(Value) == "Color3" then
 		return math.clamp((Color3.R * 255), 0, 255),
 			math.clamp((Color3.G * 255), 0, 255),
 			math.clamp((Color3.B * 255), 0, 255),
-			0
+			0,
+			typeof(Value)
 	elseif typeof(Value) == "table" then
 		if #Value == 4 then
-			return Value[1], Value[2], Value[3], Value[4]
+			return Value[1],
+				Value[2],
+				Value[3],
+				Value[4],
+				typeof(Value)
 		elseif #Value == 3 then
-			return Value[1], Value[2], Value[3], 0
+			return Value[1],
+				Value[2],
+				Value[3],
+				0,
+				typeof(Value)
 		else
-			error("[Quack] Table provided is not an RGB or RGBA array")
+			error("[Quack] Table is not of valid lengths 3 or 4")
 		end
 	else
-		error("[Quack] Could not get RGBA from color format provided")
+		error("[Quack] Value is not of types that represent an RGB or RGBA value:\n\t3 or 4 long array, Color3, 3 or 4 long tuple made up of numbers, or a 3 or 4++ long buffer with the first 3 or 4 bytes as u8s")
 	end
 end
 
@@ -1170,6 +1180,19 @@ local function Dither_NearestColor(
 	end
 end
 
+local function Quantize(
+	Calculator: DistanceCalcuator,
+	Method: Method,
+	Colors: number,
+)
+	-- # of highest-frequency colors to start with for palette reduction
+	local InitalColors = bit32.lshift(Colors, 2)
+	-- if > 0, enables hues stats and min-color retention per group
+	local MinHueCols = bit32.lshift(Colors, 2)
+
+
+end
+
 /*
  * Copyright (c) 2015, Leon Sorokin
  * All rights reserved. (MIT Licensed)
@@ -1187,7 +1210,7 @@ end
  import { HueStatistics } from '../../utils/hueStatistics';
  import { PointContainer } from '../../utils/pointContainer';
  import { stableSort } from '../../utils/arithmetic';
- 
+
  interface Box {
    x: number;
    y: number;
@@ -1263,7 +1286,7 @@ end
  
 		 idxi32 = sorted.slice(0, initialColorsLimit);
  
-		 // add any cut off colors with same freq as last
+		 -- add any cut off colors with same freq as last
 		 let pos = initialColorsLimit;
 		 const len = sorted.length;
 		 while (pos < len && this._histogram[sorted[pos]] === freq) {
@@ -1279,11 +1302,10 @@ end
 		 break;
  
 	   default:
-		 // TODO: rethink errors
 		 throw new Error('Incorrect method');
 	 }
  
-	 // int32-ify values
+	 -- int32-ify values
 	 return idxi32.map((v) => +v);
    }
  
@@ -1307,9 +1329,9 @@ end
 	 }
    }
  
-   // population threshold within subregions
-   // FIXME: this can over-reduce (few/no colors same?), need a way to keep
-   // important colors that dont ever reach local thresholds (gradients?)
+   -- population threshold within subregions
+   -- FIXME: this can over-reduce (few/no colors same?), need a way to keep
+   -- important colors that dont ever reach local thresholds (gradients?)
    private _colorStats2D(pointContainer: PointContainer) {
 	 const width = pointContainer.getWidth();
 	 const height = pointContainer.getHeight();
@@ -1329,7 +1351,7 @@ end
 	   this._iterateBox(box, width, (i) => {
 		 const col = pointArray[i].uint32;
  
-		 // collect hue stats
+		 -- collect hue stats
 		 this._hueStats.check(col);
  
 		 if (col in histG) {
