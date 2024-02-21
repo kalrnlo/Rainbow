@@ -345,7 +345,7 @@ local f64ToUint32 = bit32.band
 --------------------------------------------------------------------------------
 
 local function ColorBufferReadUint32(ColorBuffer: buffer, Index: number)
-	local NewIndex = Index * 8
+	local NewIndex = if Index ~= 0 then Index * 8 else Index
 
 	if buffer.len(ColorBuffer) < NewIndex + 8 then
 		return 0
@@ -368,7 +368,7 @@ local function ColorBufferAlloc(ColorBuffer: buffer, Index: number)
 end
 
 local function ColorBufferReadRGBA(ColorBuffer: buffer, Index: number)
-	local NewIndex = Index * 8
+	local NewIndex = if Index ~= 0 then Index * 8 else Index
 
 	if buffer.len(ColorBuffer) < NewIndex + 8 then
 		return 0, 0, 0, 0
@@ -386,7 +386,7 @@ local function ColorBufferWrite(
 	B: number,
 	A: number
 )
-	local NewIndex = Index * 8
+	local NewIndex = if Index ~= 0 then Index * 8 else Index
 	local Buffer = ColorBufferAlloc(ColorBuffer, NewIndex)
 	buffer.writeu8(Buffer, NewIndex, R)
 	buffer.writeu8(Buffer, NewIndex + 1, G)
@@ -416,34 +416,59 @@ local function HueGroup(Hue: number, Segments: number)
 	return 0
 end
 
+local function PaletteWrite(
+	Palette: Palette,
+	Index: number,
+	R: number,
+	G: number,
+	B: number,
+	A: number
+)
+	local NewBuffer = ColorBufferWrite(Palette.Colors, Index, R, G, B, A)
+	if NewBuffer ~= Palette.Colors then 
+		Palette.Colors = NewBuffer
+	end
+end
+
 local function GetNearestIndex(
+	Calcuator: DistanceCalcuator,
 	Palette: Palette,
 	R: number,
 	G: number,
 	B: number,
 	A: number,
-	Uint32: number?
 )
-	local Uint32 = Uint32 or RGBAToUint32(R, G, B, A)
-	local Index = Palette.Uint32Indexs[Uint32]
-	if Index then return Index end
+	local Uint32 = RGBAToUint32(R, G, B, A)
+	local CacheIndex = Palette.Uint32Indexs[Uint32]
+	if CacheIndex then 
+		return CacheIndex, R, G, B, A
+	end
 	
 	local ClosestDistance = math.huge
-	local ClosestBuffer
+	local ClosestR = 0
+	local ClosestG = 0
+	local ClosestB = 0
+	local ClosestA = 0
 	local ClosestIndex
 
-	for Index, ColorBuffer in Palette.Colors do
-		local Distance = Palette.Calcuator:CalculateRaw(R, G, B, A, ReadBufferRGBA(ColorBuffer))
+	for Index = 0, Palette.ColorCount, 8 do
+		local IndexR, IndexG, IndexB, IndexA = ColorBufferReadRGBA(ColorBuffer, Index)
+		local Distance = Calcuator:CalculateRaw(
+			R, G, B, A, IndexR, IndexG, IndexB, IndexA
+		)
 
-		if Distance < ClosestDistance then 
-			ClosestBuffer = ColorBuffer
+		if Distance < ClosestDistance then
 			ClosestDistance = Distance
 			ClosestIndex = Index
+			ClosestR = IndexR
+			ClosestG = IndexG
+			ClosestB = IndexB
+			ClosestA = IndexA
 		end
 	end
 
-	Palette.Uint32Indexs[Uint32] = Index
-	return Index, ClosestBuffer
+	Palette.Uint32Indexs[Uint32] = ClosestIndex
+	return ClosestIndex, ClosestR, ClosestG, ClosestB, ClosestA
 end
 
 local function GetNearestColor(
@@ -453,10 +478,10 @@ local function GetNearestColor(
 	B: number,
 	A: number
 )
-	local _, ColorBuffer = GetNearestIndex(Palette, R, G, B, A)
+	local _, NearestR, NearestG, NearestB, NearestA = GetNearestIndex(Palette, R, G, B, A)
 
 	if ColorBuffer then 
-		return ReadBufferRGBA(ColorBuffer)
+		return NearestR, NearestG, NearestB, NearestA
 	else
 		return 0, 0, 0, 0
 	end
@@ -468,8 +493,8 @@ PalettePrototype.__index = PalettePrototype
 function PalettePrototype.Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
 
-	for _, ColorBuffer in self.Colors do
-		if ReadBufferUint32(ColorBuffer) == Uint32 then 
+	for Index = 0, Palette.ColorCount, 8 do
+		if ReadBufferUint32(Palette.Colors, Index) == Uint32 then 
 			return true 
 		end
 	end
@@ -480,35 +505,41 @@ end
 -- this returns a color3
 function PalettePrototype.Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
-	return FormatRGBA(RGBAType ,GetNearestColor(self, NewR, NewG, NewB, NewA))
+	return FormatRGBA(RGBAType, GetNearestColor(self, NewR, NewG, NewB, NewA))
 end
 
 function PalettePrototype.Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	table.insert(self.Colors, CreateColorBuffer(GetRGBA(Value, G, B, A)))
+	self.ColorCount += 1
+
+	local NewBuffer = ColorBufferWrite(
+		self.Colors,
+		self.ColorCount,
+		GetRGBA(Value, G, B, A)
+	)
+	if NewBuffer ~= self.Colors then 
+		self.Colors = NewBuffer
+	end
 end
 
 function PalettePrototype.__concat(self: Palette, String: string)
-	local Color = self.Colors[1]
-
-	if Color then
-		return `{String}{RGBAToHex(ReadBufferRGBA(Color))}`
+	if not self.Colors or buffer.len(self.Colors) >= 8 then 
+		return String
 	else
-		return `{String}#000000`
+		return `{String}{RGBAToHex(ColorBufferReadRGBA(self.Colors, 0))}`
 	end
 end
 
 function PalettePrototype.__tostring(self: Palette)
-	local Color = self.Colors[1]
-
-	if Color then
-		return RGBAToHex(ReadBufferRGBA(Color))
+	if not self.Colors or buffer.len(self.Colors) >= 8 then 
+		return String
 	else
-		return "#000000"
+		return RGBAToHex(ColorBufferReadRGBA(self.Colors, 0))
 	end
 end
 
 function PalettePrototype.__len(self: Palette)
-	return #self.Colors
+	local Length = buffer.len(self.Colors)
+	return if Length > 8 then Length / 8 else Length
 end
 
 -- TODO: group very low lum and very high lum colors
