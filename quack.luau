@@ -117,15 +117,15 @@ type PalettePrototype = {
 	Nearest: ((self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
 		((self: Palette, Color3: Color3) -> (Color3, number)) &
 		((self: Palette, RGBOrRGBA: {number}) -> {number}) &
-		((self: Palette, buffer: buffer) -> buffer),
+		((self: Palette, RGBOrRGBA: buffer) -> buffer),
 	Contains: ((self: Palette, R: number, G: number, B: number, A: number?) -> boolean) &
 		((self: Palette, Color3: Color3) -> boolean) &
 		((self: Palette, RGBOrRGBA: {number}) -> boolean) &
-		((self: Palette, buffer: buffer) -> boolean),	
+		((self: Palette, RGBOrRGBA: buffer) -> boolean),	
 	Insert: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
 		((self: Palette, Color3: Color3) -> ()) &
 		((self: Palette, RGBOrRGBA: {number}) -> ()) &
-		((self: Palette, buffer: buffer) -> ()),
+		((self: Palette, RGBOrRGBA: buffer) -> ()),
 	Sort: (self: Palette) -> (),
 		
 	-- tostring(Palette) returns the first color in the palette as a hex color string
