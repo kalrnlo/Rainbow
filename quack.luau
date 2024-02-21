@@ -341,7 +341,7 @@ local function GetRGBA(
 	end
 end
 
-local f64Tou32 = bit32.band
+local f64ToUint32 = bit32.band
 
 --------------------------------------------------------------------------------
 -- Palette
