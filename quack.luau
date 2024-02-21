@@ -127,6 +127,7 @@ type PalettePrototype = {
 		((self: Palette, Color3: Color3) -> ()) &
 		((self: Palette, RGBOrRGBA: {number}) -> ()) &
 		((self: Palette, buffer: buffer) -> ()),
+	Sort: (self: Palette) -> (),
 		
 	-- tostring(Palette) returns the first color in the palette as a hex color string
 	-- same with concat but part of the concatonaded string
@@ -301,6 +302,43 @@ local function ExtractData(Data: {Color3} | EditableImage)
     end
 end
 
+local function GetRGBA(
+	Value: number | buffer | Color3 | {number},
+	G: number?,
+	B: number?,
+	A: number?
+): (number, number, number, number)
+	if typeof(Value) == "number" and G and B and A then
+		return R, G, B, A
+	elseif typeof(Value) == "buffer" then
+		if buffer.len(Value) == 4 then
+			return ReadBufferRGBA(Value)
+		elseif buffer.len(Value) == 3 then
+			return buffer.readu8(Value, 0), 
+				buffer.readu8(Value, 1),
+				buffer.readu8(Value, 2), 
+				0
+		else
+			error("[Quack] buffer provided is not in RGBA or RGB format")
+		end
+	elseif typeof(Value) == "Color3" then
+		return math.clamp((Color3.R * 255), 0, 255),
+			math.clamp((Color3.G * 255), 0, 255),
+			math.clamp((Color3.B * 255), 0, 255),
+			0
+	elseif typeof(Value) == "table" then
+		if #Value == 4 then
+			return Value[1], Value[2], Value[3], Value[4]
+		elseif #Value == 3 then
+			return Value[1], Value[2], Value[3], 0
+		else
+			error("[Quack] Table provided is not an RGB or RGBA array")
+		end
+	else
+		error("[Quack] Could not get RGBA from color format provided")
+	end
+end
+
 local f64Tou32 = bit32.band
 
 --------------------------------------------------------------------------------
@@ -348,44 +386,23 @@ end
 local PalettePrototype = {}
 PalettePrototype.__index = PalettePrototype
 
--- TODO: group very low lum and very high lum colors
--- TODO: pass custom sort order
--- TODO: sort criteria function should be placed to HueStats class
-sort() {
-  this._i32idx = {};
-  this._pointArray.sort((a: Point, b: Point) => {
-	const hslA = rgb2hsl(a.r, a.g, a.b);
-	const hslB = rgb2hsl(b.r, b.g, b.b);
+function PalettePrototype.Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
+	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
 
-	// sort all grays + whites together
-	const hueA =
-	  a.r === a.g && a.g === a.b ? 0 : 1 + hueGroup(hslA.h, hueGroups);
-	const hueB =
-	  b.r === b.g && b.g === b.b ? 0 : 1 + hueGroup(hslB.h, hueGroups);
-	/*
-	 var hueA = (a.r === a.g && a.g === a.b) ? 0 : 1 + Utils.hueGroup(hslA.h, hueGroups);
-	 var hueB = (b.r === b.g && b.g === b.b) ? 0 : 1 + Utils.hueGroup(hslB.h, hueGroups);
-	 */
+	for _, ColorBuffer in self.Colors do
+		if ReadBufferUint32(ColorBuffer) == Uint32 then return true end
+	end
 
-	const hueDiff = hueB - hueA;
-	if (hueDiff) return -hueDiff;
+	return false
+end
 
-	/*
-	 var lumDiff = Utils.lumGroup(+hslB.l.toFixed(2)) - Utils.lumGroup(+hslA.l.toFixed(2));
-	 if (lumDiff) return -lumDiff;
-	 */
-	const lA = a.getLuminosity(true);
-	const lB = b.getLuminosity(true);
+function PalettePrototype.Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
+	return GetNearestColor(self, GetRGBA(Value, G, B, A))
+end
 
-	if (lB - lA !== 0) return lB - lA;
-
-	const satDiff = ((hslB.s * 100) | 0) - ((hslA.s * 100) | 0);
-	if (satDiff) return -satDiff;
-
-	return 0;
-  });
-}
-}
+function PalettePrototype.Insert(self: Palette, Value: any, G: number?, B: number?, A: number?)
+	table.insert(self.Colors, GetRGBA(Value, G, B, A))
+end
 
 function PalettePrototype.__concat(self: Palette, String: string)
 	local Color = self.Colors[1]
@@ -395,21 +412,6 @@ function PalettePrototype.__concat(self: Palette, String: string)
 	else
 		return `{String}#000000`
 	end
-end
-
-function PalettePrototype.Nearest(self: Palette, color: Point)
-	return GetNearestColor(self, Color)
-end
-
-function PalettePrototype.Insert(self: Palette, color: Point)
-	table.insert(self.Colors, Color)
-end
-
-function PalettePrototype.Find(self: Palette, color: Point)
-	for (let i = this._pointArray.length - 1; i >= 0; i--) {
-	  if (color.uint32 === this._pointArray[i].uint32) return true;
-	}
-	return false;
 end
 
 function PalettePrototype.__tostring(self: Palette)
@@ -426,8 +428,35 @@ function PalettePrototype.__len(self: Palette)
 	return #self.Colors
 end
 
+-- TODO: group very low lum and very high lum colors
+-- TODO: pass custom sort order
+-- TODO: sort criteria function should be placed to HueStats class
 function PalettePrototype.Sort(self: Palette)
+	table.clear(self.Uint32Indexs)
+
+	table.sort(self.Colors, function(A, B)
+		const hslA = rgb2hsl(a.r, a.g, a.b);
+		const hslB = rgb2hsl(b.r, b.g, b.b);
 	
+		-- sort all grays + whites together
+		const hueA =
+		  a.r === a.g && a.g === a.b ? 0 : 1 + hueGroup(hslA.h, hueGroups);
+		const hueB =
+		  b.r === b.g && b.g === b.b ? 0 : 1 + hueGroup(hslB.h, hueGroups);
+	
+		const hueDiff = hueB - hueA;
+		if (hueDiff) return -hueDiff;
+	
+		const lA = a.getLuminosity(true);
+		const lB = b.getLuminosity(true);
+	
+		if (lB - lA !== 0) return lB - lA;
+	
+		const satDiff = ((hslB.s * 100) | 0) - ((hslA.s * 100) | 0);
+		if (satDiff) return -satDiff;
+	
+		return 0;
+	end)
 end
 
 --------------------------------------------------------------------------------
