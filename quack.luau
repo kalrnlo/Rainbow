@@ -122,7 +122,7 @@ type PalettePrototype = {
 		((self: Palette, Color3: Color3) -> boolean) &
 		((self: Palette, RGBOrRGBA: {number}) -> boolean) &
 		((self: Palette, RGBOrRGBA: buffer) -> boolean),	
-	Insert: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
+	Add: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
 		((self: Palette, Color3: Color3) -> ()) &
 		((self: Palette, RGBOrRGBA: {number}) -> ()) &
 		((self: Palette, RGBOrRGBA: buffer) -> ()),
@@ -138,7 +138,8 @@ type PalettePrototype = {
 type Palette = typeof(setmetatable({} :: {
 	Calcuator: DistanceCalcuator,
 	Uint32Indexs: {number},
-	Colors: {buffer}
+	ColorCount: number,
+	Colors: buffer,
 }, {} :: PalettePrototype))
 
 type HilbertCurve = {
@@ -163,10 +164,12 @@ type DistanceCalcuator = {
 }
 
 type ImageData = {
-	Pixels: {buffer},
+	Pixels: buffer,
 	Height: number,
 	Width: number,
 }
+
+type BufferComparator = (A: buffer, B: buffer) -> boolean
 
 -- sRGB (based on ITU-R Recommendation BT.709)
 -- http://en.wikipedia.org/wiki/SRGB
@@ -338,6 +341,150 @@ local f64ToUint32 = bit32.band
 -- Color Buffer
 --------------------------------------------------------------------------------
 
+-- TODO: Finish introsort algo but ajusted for buffers
+-- Helper function for introsort
+local function partition(arr, low, high, cmp)
+    local pivot = arr[high]
+    local i = low - 1
+
+    for j = low, high - 1 do
+        if cmp(arr[j], pivot) then
+            i = i + 1
+            arr[i], arr[j] = arr[j], arr[i]
+        end
+    end
+
+    arr[i + 1], arr[high] = arr[high], arr[i + 1]
+    return i + 1
+end
+
+-- Helper function for introsort
+local function insertion_sort(arr, low, high, cmp)
+    for i = low + 1, high do
+        local key = arr[i]
+        local j = i - 1
+
+        while j >= low and cmp(key, arr[j]) do
+            arr[j + 1] = arr[j]
+            j = j - 1
+        end
+
+        arr[j + 1] = key
+    end
+end
+
+-- Helper function for introsort with heap sort
+local function heapify(arr, n, i, cmp)
+    local largest = i
+    local left = 2 * i + 1
+    local right = 2 * i + 2
+
+    if left < n and cmp(arr[left], arr[largest]) then
+        largest = left
+    end
+
+    if right < n and cmp(arr[right], arr[largest]) then
+        largest = right
+    end
+
+    if largest ~= i then
+        arr[i], arr[largest] = arr[largest], arr[i]
+        heapify(arr, n, largest, cmp)
+    end
+end
+
+-- Heap sort implementation
+local function heapsort(arr, cmp)
+    local n = #arr
+
+    for i = math.floor(n / 2) - 1, 0, -1 do
+        heapify(arr, n, i, cmp)
+    end
+
+    for i = n - 1, 1, -1 do
+        arr[1], arr[i + 1] = arr[i + 1], arr[1]
+        heapify(arr, i, 0, cmp)
+    end
+end
+
+-- Helper function for introsort
+local function Introsort(arr, low, high, depth_limit, cmp)
+    if high - low > 16 then
+        if depth_limit == 0 then
+            -- If depth limit is reached, switch to heap sort
+            heapsort(arr, cmp)
+            return
+        end
+
+        local pivot_index = partition(arr, low, high, cmp)
+        Introsort(arr, low, pivot_index - 1, depth_limit - 1, cmp)
+        Introsort(arr, pivot_index + 1, high, depth_limit - 1, cmp)
+    else
+        -- If the partition size is small, switch to insertion sort
+        insertion_sort(arr, low, high, cmp)
+    end
+end
+
+local function IntroSort(
+	Comparator: BufferComparator,
+	DepthLimit: number,
+	Increment: number,
+	Buffer: buffer,
+	Low: number,
+	High: number,
+)
+	if High - low > 16 then
+		if DepthLimit == 0 then
+			 -- If depth limit is reached, switch to heap sort
+			 heapsort(arr, cmp)
+			 return
+		end
+
+		local Pivot = partition(arr, low, high, cmp)
+		Introsort(arr, low, pivot_index - 1, depth_limit - 1, cmp)
+        Introsort(arr, pivot_index + 1, high, depth_limit - 1, cmp)
+	else
+        -- If the partition size is small, switch to insertion sort
+        insertion_sort(arr, low, high, cmp)
+	end
+end
+
+-- Introsort function with heap sort and custom comparator
+local function BufferSort(Buffer: buffer, Increment: number, Comparator: BufferComparator)
+	local Length = buffer.len(Bufffer)
+	Introsort(
+		Comparator,
+		math.log(Length) * 2,
+		Increment,
+		Buffer,
+		0,
+		Length,
+	)
+end
+
+function introsort(arr, increment, cmp)
+    local depth_limit = math.log(#arr) * 2
+    Introsort(arr, 1, #arr, depth_limit, cmp)
+end
+
+-- Example usage with increment by 8 and custom comparator
+local myComparator = function(a, b)
+    return a < b  -- Change the comparison logic as needed
+end
+
+local function BufferAlloc(Buffer: buffer, Index: number, Increment: number)
+	local OldLength = buffer.len(Buffer)
+	local NewLength = Index + Increment
+
+	if OldLength < NewLength then
+		local NewBuffer = buffer.create(math.floor(OldLength ^ 1.5))
+		buffer.copy(NewBuffer, 0, Buffer)
+		return NewBuffer
+	else
+		return Buffer
+	end
+end
+
 local function ColorBufferReadUint32(ColorBuffer: buffer, Index: number)
 	local NewIndex = if Index ~= 0 then Index * 8 else Index
 
@@ -345,19 +492,6 @@ local function ColorBufferReadUint32(ColorBuffer: buffer, Index: number)
 		return 0
 	else
 		return buffer.readu32(Buffer, NewIndex + 4)
-	end
-end
-
-local function ColorBufferAlloc(ColorBuffer: buffer, Index: number)
-	local OldLength = buffer.len(ColorBuffer)
-	local NewLength = Index + 8
-
-	if OldLength < NewLength then
-		local NewBuffer = buffer.create(math.ceil(OldLength ^ 1.5))
-		buffer.copy(NewBuffer, 0, ColorBuffer)
-		return NewBuffer
-	else
-		return ColorBuffer
 	end
 end
 
@@ -370,6 +504,33 @@ local function ColorBufferReadRGBA(ColorBuffer: buffer, Index: number)
 		return buffer.readu8(ColorBuffer, NewIndex), buffer.readu8(ColorBuffer, NewIndex + 1),
 			buffer.readu8(ColorBuffer, NewIndex + 2), buffer.readu8(ColorBuffer, NewIndex + 3)
 	end
+end
+
+local function ColorBufferAlloc(ColorBuffer: buffer, Index: number)
+	return BufferAlloc(ColorBuffer, Index, 8)
+end
+
+local function RGBABufferRead(Buffer: buffer, Index: number)
+	local NewIndex = if Index ~= 0 then Index * 4 else Index
+	buffer.writeu8(Buffer, Index, R)
+	buffer.writeu8(Buffer, Index + 1, G)
+	buffer.writeu8(Buffer, Index + 2, B)
+	buffer.writeu8(Buffer, Index + 3, A)
+end
+
+local function RGBABufferWrite(
+	Buffer: buffer,
+	Index: number,
+	R: number,
+	G: number,
+	B: number,
+	A: number
+)
+	local NewIndex = if Index ~= 0 then Index * 4 else Index
+	buffer.writeu8(Buffer, NewIndex, R)
+	buffer.writeu8(Buffer, NewIndex + 1, G)
+	buffer.writeu8(Buffer, NewIndex + 2, B)
+	buffer.writeu8(Buffer, NewIndex + 3, A)
 end
 
 local function ColorBufferWrite(
@@ -425,11 +586,11 @@ local function GetNearestIndex(
 	end
 	
 	local ClosestDistance = math.huge
+	local ClosestIndex
 	local ClosestR = 0
 	local ClosestG = 0
 	local ClosestB = 0
 	local ClosestA = 0
-	local ClosestIndex
 
 	for Index = 0, Palette.ColorCount, 8 do
 		local IndexR, IndexG, IndexB, IndexA = ColorBufferReadRGBA(ColorBuffer, Index)
@@ -457,14 +618,8 @@ local function GetNearestColor(
 	G: number,
 	B: number,
 	A: number
-)
-	local _, NearestR, NearestG, NearestB, NearestA = GetNearestIndex(Palette, R, G, B, A)
-
-	if ColorBuffer then 
-		return NearestR, NearestG, NearestB, NearestA
-	else
-		return 0, 0, 0, 0
-	end
+): (number, number, number, number)
+	return select(2, GetNearestIndex(Palette.Calculator, Palette, R, G, B, A))
 end
 
 local PalettePrototype = {}
@@ -474,15 +629,13 @@ function PalettePrototype.Contains(self: Palette, Value: any, G: number?, B: num
 	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
 
 	for Index = 0, Palette.ColorCount, 8 do
-		if ReadBufferUint32(Palette.Colors, Index) == Uint32 then 
+		if ColorBufferReadUint32(Palette.Colors, Index) == Uint32 then 
 			return true 
 		end
 	end
 	return false
 end
 
--- TODO: make this return in the format the user used ie if the user put in a color3,
--- this returns a color3
 function PalettePrototype.Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
 	return FormatRGBA(RGBAType, GetNearestColor(self, NewR, NewG, NewB, NewA))
@@ -516,9 +669,10 @@ end
 
 function PalettePrototype.__len(self: Palette)
 	local Length = buffer.len(self.Colors)
-	return if Length > 8 then Length / 8 else Length
+	return if Length >= 8 then Length / 8 else Length
 end
 
+-- TODO: Finish introsort algo but ajusted for buffers
 -- TODO: group very low lum and very high lum colors
 -- TODO: pass custom sort order
 -- TODO: sort criteria function should be placed to HueStats class
@@ -782,7 +936,7 @@ local function CreateCalcuator(
 )
     local Calcuator = Calcuators[DistanceFormula]
     if not Calcuator then
-        error(`[Quack] No distance calcuator exists for {DistanceFormula}`, 3)
+        error(`[Quack] No distance calcuator exists for {DistanceFormula}`)
     end
 
     local self = setmetatable({
