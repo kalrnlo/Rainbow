@@ -212,7 +212,7 @@ local function RGBAToUint32(R: number, G: number, B: number, A: number)
 	return bit32.rshift(
 		bit32.bor(bit32.lshift(A, 24), bit32.lshift(B, 16), bit32.lshift(G, 8), R), 0
 	)
- end
+end
 
 local function RGBAToHex(R: number, G: number, B: number, A: number?)
 	--return string.format("#%02X%02X%02X%02X", R, G, B, math.clamp(math.floor(A * 255), 0, 255))
