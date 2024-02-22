@@ -387,7 +387,7 @@ local function BufferWriteRGBA(
 	R: number,
 	G: number,
 	B: number,
-	A: number
+	A: number,
 )
 	local NewIndex = if Index ~= 0 then Index * 4 else Index
 	buffer.writeu8(Buffer, NewIndex, R)
@@ -474,7 +474,7 @@ function PalettePrototype.Contains(self: Palette, Value: any, G: number?, B: num
 
 	for _, ColorBuffer in self.Colors do
 		if BufferReadUint32(ColorBuffer) == Uint32 then 
-			return true 
+			return true
 		end
 	end
 	return false
@@ -510,7 +510,6 @@ function PalettePrototype.__len(self: Palette)
 	return #self.Colors
 end
 
--- TODO: Finish introsort algo but ajusted for buffers
 -- TODO: group very low lum and very high lum colors
 -- TODO: pass custom sort order
 -- TODO: sort criteria function should be placed to HueStats class
@@ -981,8 +980,8 @@ local function Dither_ErrorDiffusionArray(
 				Palette, CorrectedR, CorrectedG, CorrectedB, CorrectedA
 			)
 
-			ImageData.Pixels[Index] = OverwriteColorBuffer(
-				ColorBuffer, PaletteR, PaletteG, PaletteB, PaletteA
+			ImageData.Pixels[Index] = WriteOrCreateColorBuffer(
+				PaletteR, PaletteG, PaletteB, PaletteA, ColorBuffer
 			)
 
 			-- dithering strength
@@ -1183,8 +1182,8 @@ local function Dither_NearestColor(
 			local ColorBuffer = ImageData.Pixels[Index]
 
 			-- Reduced pixel
-			ImageData.Pixels[Index] = OverwriteColorBuffer(
-				ColorBuffer, GetNearestColor(Palette, ReadBufferRGBA(ColorBuffer))
+			ImageData.Pixels[Index] = WriteOrCreateColorBuffer(
+				GetNearestColor(Palette, ReadBufferRGBA(ColorBuffer)), ColorBuffer
 			)
 			Index += 1
 		end
