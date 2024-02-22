@@ -343,20 +343,6 @@ local f64ToUint32 = bit32.band
 
 -- TODO: Finish introsort algo but ajusted for buffers
 -- Helper function for introsort
-local function partition(arr, low, high, cmp)
-    local pivot = arr[high]
-    local i = low - 1
-
-    for j = low, high - 1 do
-        if cmp(arr[j], pivot) then
-            i = i + 1
-            arr[i], arr[j] = arr[j], arr[i]
-        end
-    end
-
-    arr[i + 1], arr[high] = arr[high], arr[i + 1]
-    return i + 1
-end
 
 -- Helper function for introsort
 local function insertion_sort(arr, low, high, cmp)
@@ -405,6 +391,56 @@ local function heapsort(arr, cmp)
         arr[1], arr[i + 1] = arr[i + 1], arr[1]
         heapify(arr, i, 0, cmp)
     end
+end
+
+local function partition(arr, low, high, cmp)
+    local pivot = arr[high]
+    local i = low - 1
+
+    for j = low, high - 1 do
+        if cmp(arr[j], pivot) then
+            i = i + 1
+            arr[i], arr[j] = arr[j], arr[i]
+        end
+    end
+
+    arr[i + 1], arr[high] = arr[high], arr[i + 1]
+    return i + 1
+end
+
+
+local function Partition(Buffer: buffer, Low: number, High: number, Increment: number, Comparator: BufferComparator)
+	local Pivot = buffer.create(Increment)
+	local Index = Low - Increment
+
+	buffer.copy(Pivot, 0, Buffer, buffer.len(Buffer) - Increment)
+	local Index = Low - Increment
+ --   local pivot = arr[high]
+ --   local i = low - 1
+
+	for J = Low, High - Increment, Increment do
+		local BufferAtJ = buffer.create(Increment)
+		buffer.copy(BufferAtJ, 0, Buffer, J, Increment)
+
+		if Comparator(BufferAtJ, Pivot) then
+			Index += Increment
+			buffer.copy(Buffer, J, Buffer, Index, Increment)
+			buffer.copy(Buffer, Index, BufferAtJ)
+		end
+	end
+
+	local HighestBuffer = buffer.create(Increment)
+	buffer.copy(Buffer, Index + Increment, )
+
+    for j = low, high - 1 do
+        if cmp(arr[j], pivot) then
+            i = i + 1
+            arr[i], arr[j] = arr[j], arr[i]
+        end
+    end
+
+    arr[i + 1], arr[high] = arr[high], arr[i + 1]
+    return i + 1
 end
 
 -- Helper function for introsort
@@ -506,10 +542,6 @@ local function ColorBufferReadRGBA(ColorBuffer: buffer, Index: number)
 	end
 end
 
-local function ColorBufferAlloc(ColorBuffer: buffer, Index: number)
-	return BufferAlloc(ColorBuffer, Index, 8)
-end
-
 local function RGBABufferRead(Buffer: buffer, Index: number)
 	local NewIndex = if Index ~= 0 then Index * 4 else Index
 	buffer.writeu8(Buffer, Index, R)
@@ -542,7 +574,7 @@ local function ColorBufferWrite(
 	A: number
 )
 	local NewIndex = if Index ~= 0 then Index * 8 else Index
-	local Buffer = ColorBufferAlloc(ColorBuffer, NewIndex)
+	local Buffer = BufferAlloc(ColorBuffer, NewIndex, 8)
 	buffer.writeu8(Buffer, NewIndex, R)
 	buffer.writeu8(Buffer, NewIndex + 1, G)
 	buffer.writeu8(Buffer, NewIndex + 2, B)
