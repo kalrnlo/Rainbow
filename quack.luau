@@ -366,7 +366,7 @@ local function BufferReadUint32(Buffer: buffer)
 	return buffer.readu32(Buffer, 4)
 end
 
-local function WriteColorBuffer(
+local function WriteOrCreateColorBuffer(
 	R: number,
 	G: number,
 	B: number,
