@@ -379,7 +379,6 @@ local function heapify(arr, n, i, cmp)
     end
 end
 
--- Heap sort implementation
 local function heapsort(arr, cmp)
     local n = #arr
 
@@ -393,28 +392,31 @@ local function heapsort(arr, cmp)
     end
 end
 
-local function partition(arr, low, high, cmp)
-    local pivot = arr[high]
-    local i = low - 1
+local function HeapSort(Buffer: buffer, Increment: number, Comparator: BufferComparator)
+    local n = #arr
 
-    for j = low, high - 1 do
-        if cmp(arr[j], pivot) then
-            i = i + 1
-            arr[i], arr[j] = arr[j], arr[i]
-        end
+    for i = math.floor(n / 2) - 1, 0, -1 do
+        heapify(arr, n, i, cmp)
     end
 
-    arr[i + 1], arr[high] = arr[high], arr[i + 1]
-    return i + 1
+    for i = n - 1, 1, -1 do
+        arr[1], arr[i + 1] = arr[i + 1], arr[1]
+        heapify(arr, i, 0, cmp)
+    end
 end
 
-
-local function Partition(Buffer: buffer, Low: number, High: number, Increment: number, Comparator: BufferComparator)
+local function Partition(
+	Buffer: buffer,
+	Low: number,
+	High: number, 
+	Increment: number,
+	Comparator: BufferComparator
+)
+	local HighIndex = buffer.len(Buffer) - Increment
 	local Pivot = buffer.create(Increment)
 	local Index = Low - Increment
 
-	buffer.copy(Pivot, 0, Buffer, buffer.len(Buffer) - Increment)
-	local Index = Low - Increment
+	buffer.copy(Pivot, 0, Buffer, HighIndex)
  --   local pivot = arr[high]
  --   local i = low - 1
 
@@ -428,10 +430,14 @@ local function Partition(Buffer: buffer, Low: number, High: number, Increment: n
 			buffer.copy(Buffer, Index, BufferAtJ)
 		end
 	end
+	local SwapIndex = Index + Increment
 
-	local HighestBuffer = buffer.create(Increment)
-	buffer.copy(Buffer, Index + Increment, )
-
+	-- moving Index + Increment to the high position
+	buffer.copy(Buffer, HighIndex, Buffer, SwapIndex, Increment)
+	-- moving high (basically pivot) to the Index + Increment position
+	buffer.copy(Buffer, SwapIndex, Pivot)
+	return SwapIndex
+	--[[
     for j = low, high - 1 do
         if cmp(arr[j], pivot) then
             i = i + 1
@@ -441,6 +447,7 @@ local function Partition(Buffer: buffer, Low: number, High: number, Increment: n
 
     arr[i + 1], arr[high] = arr[high], arr[i + 1]
     return i + 1
+	--]]
 end
 
 -- Helper function for introsort
