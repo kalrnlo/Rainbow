@@ -8,10 +8,6 @@
 -- @Kalrnlo
 -- 18/02/2024
 
--- TODO: Port over histogram class and other classes from image-quantization into luau
--- and remove usage of those closes for luau version as we are just having singular functions
--- and only using a palette class (hopefully) as a return for simplicity for quack users (it feels so weird saying quack users help)
-
 --[[
 local Image1 = Quant.ExtractData(EditableImage)
 local Image2 = Quack.ExtractData(EditableImage)
@@ -304,7 +300,11 @@ local function GetRGBA(
 		-- so allowing it to be greater than 4 is so someone could
 		-- use a ColorBuffer without it erroring
 		if buffer.len(Value) >= 4 then
-			return ReadBufferRGBA(Value)
+			return buffer.readu8(Value, 0), 
+				buffer.readu8(Value, 1),
+				buffer.readu8(Value, 2),
+				buffer.readu8(Value, 3),
+				typeof(Value)
 		elseif buffer.len(Value) == 3 then
 			return buffer.readu8(Value, 0), 
 				buffer.readu8(Value, 1),
@@ -338,182 +338,8 @@ end
 local f64ToUint32 = bit32.band
 
 --------------------------------------------------------------------------------
--- Color Buffer
+-- Buffer
 --------------------------------------------------------------------------------
-
--- TODO: Finish introsort algo but ajusted for buffers
--- Helper function for introsort
-
--- Helper function for introsort
-local function insertion_sort(arr, low, high, cmp)
-    for i = low + 1, high do
-        local key = arr[i]
-        local j = i - 1
-
-        while j >= low and cmp(key, arr[j]) do
-            arr[j + 1] = arr[j]
-            j = j - 1
-        end
-
-        arr[j + 1] = key
-    end
-end
-
--- Helper function for introsort with heap sort
-local function heapify(arr, n, i, cmp)
-    local largest = i
-    local left = 2 * i + 1
-    local right = 2 * i + 2
-
-    if left < n and cmp(arr[left], arr[largest]) then
-        largest = left
-    end
-
-    if right < n and cmp(arr[right], arr[largest]) then
-        largest = right
-    end
-
-    if largest ~= i then
-        arr[i], arr[largest] = arr[largest], arr[i]
-        heapify(arr, n, largest, cmp)
-    end
-end
-
-local function heapsort(arr, cmp)
-    local n = #arr
-
-    for i = math.floor(n / 2) - 1, 0, -1 do
-        heapify(arr, n, i, cmp)
-    end
-
-    for i = n - 1, 1, -1 do
-        arr[1], arr[i + 1] = arr[i + 1], arr[1]
-        heapify(arr, i, 0, cmp)
-    end
-end
-
-local function HeapSort(Buffer: buffer, Increment: number, Comparator: BufferComparator)
-    local n = #arr
-
-    for i = math.floor(n / 2) - 1, 0, -1 do
-        heapify(arr, n, i, cmp)
-    end
-
-    for i = n - 1, 1, -1 do
-        arr[1], arr[i + 1] = arr[i + 1], arr[1]
-        heapify(arr, i, 0, cmp)
-    end
-end
-
-local function Partition(
-	Buffer: buffer,
-	Low: number,
-	High: number, 
-	Increment: number,
-	Comparator: BufferComparator
-)
-	local HighIndex = buffer.len(Buffer) - Increment
-	local Pivot = buffer.create(Increment)
-	local Index = Low - Increment
-
-	buffer.copy(Pivot, 0, Buffer, HighIndex)
- --   local pivot = arr[high]
- --   local i = low - 1
-
-	for J = Low, High - Increment, Increment do
-		local BufferAtJ = buffer.create(Increment)
-		buffer.copy(BufferAtJ, 0, Buffer, J, Increment)
-
-		if Comparator(BufferAtJ, Pivot) then
-			Index += Increment
-			buffer.copy(Buffer, J, Buffer, Index, Increment)
-			buffer.copy(Buffer, Index, BufferAtJ)
-		end
-	end
-	local SwapIndex = Index + Increment
-
-	-- moving Index + Increment to the high position
-	buffer.copy(Buffer, HighIndex, Buffer, SwapIndex, Increment)
-	-- moving high (basically pivot) to the Index + Increment position
-	buffer.copy(Buffer, SwapIndex, Pivot)
-	return SwapIndex
-	--[[
-    for j = low, high - 1 do
-        if cmp(arr[j], pivot) then
-            i = i + 1
-            arr[i], arr[j] = arr[j], arr[i]
-        end
-    end
-
-    arr[i + 1], arr[high] = arr[high], arr[i + 1]
-    return i + 1
-	--]]
-end
-
--- Helper function for introsort
-local function Introsort(arr, low, high, depth_limit, cmp)
-    if high - low > 16 then
-        if depth_limit == 0 then
-            -- If depth limit is reached, switch to heap sort
-            heapsort(arr, cmp)
-            return
-        end
-
-        local pivot_index = partition(arr, low, high, cmp)
-        Introsort(arr, low, pivot_index - 1, depth_limit - 1, cmp)
-        Introsort(arr, pivot_index + 1, high, depth_limit - 1, cmp)
-    else
-        -- If the partition size is small, switch to insertion sort
-        insertion_sort(arr, low, high, cmp)
-    end
-end
-
-local function IntroSort(
-	Comparator: BufferComparator,
-	DepthLimit: number,
-	Increment: number,
-	Buffer: buffer,
-	Low: number,
-	High: number,
-)
-	if High - low > 16 then
-		if DepthLimit == 0 then
-			 -- If depth limit is reached, switch to heap sort
-			 heapsort(arr, cmp)
-			 return
-		end
-
-		local Pivot = partition(arr, low, high, cmp)
-		Introsort(arr, low, pivot_index - 1, depth_limit - 1, cmp)
-        Introsort(arr, pivot_index + 1, high, depth_limit - 1, cmp)
-	else
-        -- If the partition size is small, switch to insertion sort
-        insertion_sort(arr, low, high, cmp)
-	end
-end
-
--- Introsort function with heap sort and custom comparator
-local function BufferSort(Buffer: buffer, Increment: number, Comparator: BufferComparator)
-	local Length = buffer.len(Bufffer)
-	Introsort(
-		Comparator,
-		math.log(Length) * 2,
-		Increment,
-		Buffer,
-		0,
-		Length,
-	)
-end
-
-function introsort(arr, increment, cmp)
-    local depth_limit = math.log(#arr) * 2
-    Introsort(arr, 1, #arr, depth_limit, cmp)
-end
-
--- Example usage with increment by 8 and custom comparator
-local myComparator = function(a, b)
-    return a < b  -- Change the comparison logic as needed
-end
 
 local function BufferAlloc(Buffer: buffer, Index: number, Increment: number)
 	local OldLength = buffer.len(Buffer)
@@ -528,36 +354,35 @@ local function BufferAlloc(Buffer: buffer, Index: number, Increment: number)
 	end
 end
 
-local function ColorBufferReadUint32(ColorBuffer: buffer, Index: number)
-	local NewIndex = if Index ~= 0 then Index * 8 else Index
-
-	if buffer.len(ColorBuffer) < NewIndex + 8 then
-		return 0
-	else
-		return buffer.readu32(Buffer, NewIndex + 4)
-	end
+local function BufferReadRGBA(Buffer: buffer, Index: number?)
+	local NewIndex = Index or 0
+	buffer.writeu8(Buffer, NewIndex, R)
+	buffer.writeu8(Buffer, NewIndex + 1, G)
+	buffer.writeu8(Buffer, NewIndex + 2, B)
+	buffer.writeu8(Buffer, NewIndex + 3, A)
 end
 
-local function ColorBufferReadRGBA(ColorBuffer: buffer, Index: number)
-	local NewIndex = if Index ~= 0 then Index * 8 else Index
-
-	if buffer.len(ColorBuffer) < NewIndex + 8 then
-		return 0, 0, 0, 0
-	else
-		return buffer.readu8(ColorBuffer, NewIndex), buffer.readu8(ColorBuffer, NewIndex + 1),
-			buffer.readu8(ColorBuffer, NewIndex + 2), buffer.readu8(ColorBuffer, NewIndex + 3)
-	end
+local function BufferReadUint32(Buffer: buffer)
+	return buffer.readu32(Buffer, 4)
 end
 
-local function RGBABufferRead(Buffer: buffer, Index: number)
-	local NewIndex = if Index ~= 0 then Index * 4 else Index
-	buffer.writeu8(Buffer, Index, R)
-	buffer.writeu8(Buffer, Index + 1, G)
-	buffer.writeu8(Buffer, Index + 2, B)
-	buffer.writeu8(Buffer, Index + 3, A)
+local function WriteColorBuffer(
+	R: number,
+	G: number,
+	B: number,
+	A: number,
+	ColorBuffer: buffer?,
+)
+	local Buffer = ColorBuffer or buffer.create(8)
+	buffer.writeu8(Buffer, 0, R)
+	buffer.writeu8(Buffer, 1, G)
+	buffer.writeu8(Buffer, 2, B)
+	buffer.writeu8(Buffer, 3, A)
+	buffer.writeu32(Buffer, 4, RGBAToUint32(R, G, B, A))
+	return Buffer
 end
 
-local function RGBABufferWrite(
+local function BufferWriteRGBA(
 	Buffer: buffer,
 	Index: number,
 	R: number,
@@ -570,24 +395,6 @@ local function RGBABufferWrite(
 	buffer.writeu8(Buffer, NewIndex + 1, G)
 	buffer.writeu8(Buffer, NewIndex + 2, B)
 	buffer.writeu8(Buffer, NewIndex + 3, A)
-end
-
-local function ColorBufferWrite(
-	ColorBuffer: buffer,
-	Index: number,
-	R: number,
-	G: number,
-	B: number,
-	A: number
-)
-	local NewIndex = if Index ~= 0 then Index * 8 else Index
-	local Buffer = BufferAlloc(ColorBuffer, NewIndex, 8)
-	buffer.writeu8(Buffer, NewIndex, R)
-	buffer.writeu8(Buffer, NewIndex + 1, G)
-	buffer.writeu8(Buffer, NewIndex + 2, B)
-	buffer.writeu8(Buffer, NewIndex + 3, A)
-	buffer.writeu32(Buffer, NewIndex + 4, RGBAToUint32(R, G, B, A))
-	return Buffer
 end
 
 --------------------------------------------------------------------------------
