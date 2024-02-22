@@ -134,8 +134,7 @@ type PalettePrototype = {
 type Palette = typeof(setmetatable({} :: {
 	Calcuator: DistanceCalcuator,
 	Uint32Indexs: {number},
-	ColorCount: number,
-	Colors: buffer,
+	Colors: {buffer},
 }, {} :: PalettePrototype))
 
 type HilbertCurve = {
@@ -418,7 +417,6 @@ local function HueGroup(Hue: number, Segments: number)
 end
 
 local function GetNearestIndex(
-	Calcuator: DistanceCalcuator,
 	Palette: Palette,
 	R: number,
 	G: number,
@@ -438,9 +436,9 @@ local function GetNearestIndex(
 	local ClosestB = 0
 	local ClosestA = 0
 
-	for Index = 0, Palette.ColorCount, 8 do
-		local IndexR, IndexG, IndexB, IndexA = ColorBufferReadRGBA(ColorBuffer, Index)
-		local Distance = Calcuator:CalculateRaw(
+	for _, ColorBuffer in self.Colors do
+		local IndexR, IndexG, IndexB, IndexA = BufferReadRGBA(ColorBuffer)
+		local Distance = Palette.Calculator:CalculateRaw(
 			R, G, B, A, IndexR, IndexG, IndexB, IndexA
 		)
 
@@ -465,7 +463,7 @@ local function GetNearestColor(
 	B: number,
 	A: number
 ): (number, number, number, number)
-	return select(2, GetNearestIndex(Palette.Calculator, Palette, R, G, B, A))
+	return select(2, GetNearestIndex(Palette, R, G, B, A))
 end
 
 local PalettePrototype = {}
@@ -474,8 +472,8 @@ PalettePrototype.__index = PalettePrototype
 function PalettePrototype.Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
 
-	for Index = 0, Palette.ColorCount, 8 do
-		if ColorBufferReadUint32(Palette.Colors, Index) == Uint32 then 
+	for _, ColorBuffer in self.Colors do
+		if BufferReadUint32(ColorBuffer) == Uint32 then 
 			return true 
 		end
 	end
@@ -488,34 +486,28 @@ function PalettePrototype.Nearest(self: Palette, Value: any, G: number?, B: numb
 end
 
 function PalettePrototype.Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	self.ColorCount += 1
-
-	self.Colors = ColorBufferWrite(
-		self.Colors,
-		self.ColorCount,
-		GetRGBA(Value, G, B, A)
-	)
+	local NewR, NewG, NewB, NewA = GetRGBA(Value, G, B, A)
+	table.insert(self.Colors, WriteOrCreateColorBuffer(NewR, NewG, NewB, NewA))
 end
 
 function PalettePrototype.__concat(self: Palette, String: string)
-	if not self.Colors or buffer.len(self.Colors) >= 8 then 
+	if not self.Colors or #self.Colors < 1 then 
 		return String
 	else
-		return `{String}{RGBAToHex(ColorBufferReadRGBA(self.Colors, 0))}`
+		return `{String}{RGBAToHex(BufferReadRGBA(self.Colors[1]))}`
 	end
 end
 
 function PalettePrototype.__tostring(self: Palette)
-	if not self.Colors or buffer.len(self.Colors) >= 8 then 
-		return String
+	if not self.Colors or #self.Colors < 1 then 
+		return "#000000"
 	else
-		return RGBAToHex(ColorBufferReadRGBA(self.Colors, 0))
+		return RGBAToHex(BufferReadRGBA(self.Colors[1]))
 	end
 end
 
 function PalettePrototype.__len(self: Palette)
-	local Length = buffer.len(self.Colors)
-	return if Length >= 8 then Length / 8 else Length
+	return #self.Colors
 end
 
 -- TODO: Finish introsort algo but ajusted for buffers
@@ -528,8 +520,8 @@ function PalettePrototype.Sort(self: Palette)
 	table.clear(self.Uint32Indexs)
 
 	table.sort(self.Colors, function(A, B)
-		local AR, AG, AB, AA = ReadBufferRGBA(A)
-		local BR, BG, BB, BA = ReadBufferRGBA(B)
+		local AR, AG, AB, AA = BufferReadRGBA(A)
+		local BR, BG, BB, BA = BufferReadRGBA(B)
 		local AH, AS, AL = RGBToHSL(AR, AG, AB)
 		local BH, BS, BL = RGBToHSL(BR, BG, BB)
 	
@@ -1161,8 +1153,8 @@ local function Dither_ErrorDiffusionRiemersma(
 		
 			-- update point
 			--p.from(quantizedPoint);
-			ImageData.Pixels[PixelIndex] = OverwriteColorBuffer(
-				ColorBuffer, QuantizedR, QuantizedG, QuantizedB, QuantizedA
+			ImageData.Pixels[PixelIndex] = WriteOrCreateColorBuffer(
+				QuantizedR, QuantizedG, QuantizedB, QuantizedA, ColorBuffer
 			)
 		end,
 
