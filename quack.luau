@@ -1202,6 +1202,10 @@ local function Dither_NearestColor(
 	end
 end
 
+--------------------------------------------------------------------------------
+-- Quantization
+--------------------------------------------------------------------------------
+
 local function Quantize(
 	Calculator: DistanceCalcuator,
 	Method: Method,
