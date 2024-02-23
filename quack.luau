@@ -246,6 +246,24 @@ local function RGBToHSL(R: number, G: number, B: number)
 	return H, S, L
 end
 
+local function ExtractData(Data: {Color3} | EditableImage)
+    if typeof(Data) == "Instance" then
+        return EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
+    elseif #Data > 0 then
+        local NewData = table.create(#Data * 4, 0)
+
+        for Index, Color3 in Data do
+            local NewIndex = if Index ~= 1 then Index * 4 else 1
+            NewData[NewIndex] = math.clamp((Color3.R * 255), 0, 255)
+            NewData[NewIndex + 1] = math.clamp((Color3.G * 255), 0, 255)
+            NewData[NewIndex + 2] = math.clamp((Color3.B * 255), 0, 255)
+        end
+        return NewData
+    else
+        error("[Quack] Extract data failed, array provided may have had 0 indexs")
+    end
+end
+
 local function FormatRGBA(RGBAType: RGBAType, R: number, G: number, B: number, A: number): any
 	if RGBAType == "number" then
 		return R, G, B, A
@@ -266,24 +284,6 @@ local function FormatRGBA(RGBAType: RGBAType, R: number, G: number, B: number, A
 		buffer.writeu8(RGBABuffer, 3, A)
 		return RGBABuffer
 	end
-end
-
-local function ExtractData(Data: {Color3} | EditableImage)
-    if typeof(Data) == "Instance" then
-        return EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
-    elseif #Data > 0 then
-        local NewData = table.create(#Data * 4, 0)
-
-        for Index, Color3 in Data do
-            local NewIndex = if Index ~= 1 then Index * 4 else 1
-            NewData[NewIndex] = math.clamp((Color3.R * 255), 0, 255)
-            NewData[NewIndex + 1] = math.clamp((Color3.G * 255), 0, 255)
-            NewData[NewIndex + 2] = math.clamp((Color3.B * 255), 0, 255)
-        end
-        return NewData
-    else
-        error("[Quack] Extract data failed, array provided may have had 0 indexs")
-    end
 end
 
 local function GetRGBA(
@@ -466,10 +466,7 @@ local function GetNearestColor(
 	return select(2, GetNearestIndex(Palette, R, G, B, A))
 end
 
-local PalettePrototype = {}
-PalettePrototype.__index = PalettePrototype
-
-function PalettePrototype.Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
+local function Palette_Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
 
 	for _, ColorBuffer in self.Colors do
@@ -480,17 +477,17 @@ function PalettePrototype.Contains(self: Palette, Value: any, G: number?, B: num
 	return false
 end
 
-function PalettePrototype.Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
+local function Palette_Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
 	return FormatRGBA(RGBAType, GetNearestColor(self, NewR, NewG, NewB, NewA))
 end
 
-function PalettePrototype.Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
+local function Palette_Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local NewR, NewG, NewB, NewA = GetRGBA(Value, G, B, A)
 	table.insert(self.Colors, WriteOrCreateColorBuffer(NewR, NewG, NewB, NewA))
 end
 
-function PalettePrototype.__concat(self: Palette, String: string)
+local function Palette_concat(self: Palette, String: string)
 	if not self.Colors or #self.Colors < 1 then 
 		return String
 	else
@@ -498,7 +495,7 @@ function PalettePrototype.__concat(self: Palette, String: string)
 	end
 end
 
-function PalettePrototype.__tostring(self: Palette)
+local function Palette_tostring(self: Palette)
 	if not self.Colors or #self.Colors < 1 then 
 		return "#000000"
 	else
@@ -506,7 +503,7 @@ function PalettePrototype.__tostring(self: Palette)
 	end
 end
 
-function PalettePrototype.__len(self: Palette)
+local function Palette_len(self: Palette)
 	return #self.Colors
 end
 
@@ -515,7 +512,8 @@ end
 -- TODO: sort criteria function should be placed to HueStats class
 -- note: > 0 is basically how you convert js sort to lua easily
 -- its what robloxs luau polyfill does for its array.sort
-function PalettePrototype.Sort(self: Palette)
+
+local function Palette_Sort(self: Palette)
 	table.clear(self.Uint32Indexs)
 
 	table.sort(self.Colors, function(A, B)
@@ -546,6 +544,17 @@ function PalettePrototype.Sort(self: Palette)
 		end
 	end)
 end
+
+local PalettePrototype = {
+	__tostring = Palette_tostring,
+	Contains = Palette_Contains,
+	__concat = Palette_concat,
+	Nearest = Palette_Nearest,
+	Sort = Palette_Sort,
+	__len = Palette_len,
+	Add = Palette_Add,
+}
+PalettePrototype.__index = PalettePrototype
 
 --------------------------------------------------------------------------------
 -- Distance
