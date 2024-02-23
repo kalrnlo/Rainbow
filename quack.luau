@@ -1209,7 +1209,7 @@ end
 local function Quantize(
 	Calculator: DistanceCalcuator,
 	Method: Method,
-	Colors: number,
+	Colors: number
 )
 	-- # of highest-frequency colors to start with for palette reduction
 	local InitalColors = bit32.lshift(Colors, 2)
