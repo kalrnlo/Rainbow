@@ -191,11 +191,9 @@ local BT709 = {
 
 -- TODO:
 -- Luminance from RGB:
-
 -- Luminance (standard for certain colour spaces): (0.2126*R + 0.7152*G + 0.0722*B) [1]
 -- Luminance (perceived option 1): (0.299*R + 0.587*G + 0.114*B) [2]
 -- Luminance (perceived option 2, slower to calculate):  sqrt( 0.241*R^2 + 0.691*G^2 + 0.068*B^2 ) ? sqrt( 0.299*R^2 + 0.587*G^2 + 0.114*B^2 ) (thanks to @MatthewHerbst) [http://alienryderflex.com/hsp.html]
-
 local function GetRGBALuminosity(R: number, G: number, B: number, A: number?)
 	if A then
 		return (math.min(255, (255 - A + (A * R)) / 255) * Y.RED) +
@@ -334,12 +332,11 @@ local function GetRGBA(
 	end
 end
 
-local f64ToUint32 = bit32.band
-
 --------------------------------------------------------------------------------
 -- Buffer
 --------------------------------------------------------------------------------
 
+--[[
 local function BufferAlloc(Buffer: buffer, Index: number, Increment: number)
 	local OldLength = buffer.len(Buffer)
 	local NewLength = Index + Increment
@@ -352,6 +349,7 @@ local function BufferAlloc(Buffer: buffer, Index: number, Increment: number)
 		return Buffer
 	end
 end
+--]]
 
 local function BufferReadRGBA(Buffer: buffer, Index: number?)
 	local NewIndex = Index or 0
@@ -503,16 +501,11 @@ local function Palette_tostring(self: Palette)
 	end
 end
 
-local function Palette_len(self: Palette)
-	return #self.Colors
-end
-
 -- TODO: group very low lum and very high lum colors
 -- TODO: pass custom sort order
 -- TODO: sort criteria function should be placed to HueStats class
 -- note: > 0 is basically how you convert js sort to lua easily
 -- its what robloxs luau polyfill does for its array.sort
-
 local function Palette_Sort(self: Palette)
 	table.clear(self.Uint32Indexs)
 
@@ -543,6 +536,10 @@ local function Palette_Sort(self: Palette)
 			return false
 		end
 	end)
+end
+
+local function Palette_len(self: Palette)
+	return #self.Colors
 end
 
 local PalettePrototype = {
@@ -759,7 +756,7 @@ local Calcuators: {
 local CalcuatorPrototype = {}
 CalcuatorPrototype.__index = CalcuatorPrototype
 
-function CalcuatorPrototype.CalcuateNormalized(
+local function Calcuator_CalcuateNormalized(
     self: DistanceCalcuator,
     R1: number,
     G1: number,
@@ -772,6 +769,11 @@ function CalcuatorPrototype.CalcuateNormalized(
 )
     return self:CalculateRaw(R1, G1, B1, A1, R2, G2, B2, A2) / self.MaxDistance
 end
+
+local CalcuatorPrototype = {
+	CalcuateNormalized = Calcuator_CalcuateNormalized
+}
+CalcuatorPrototype.__index = CalcuatorPrototype
 
 local function CreateCalcuator(
     DistanceFormula: DistanceFormula,
@@ -1043,10 +1045,7 @@ local function Dither_ErrorDiffusionArray(
 	end
 end
 
-local HilbertCurvePrototype = {}
-HilbertCurvePrototype.__index = HilbertCurvePrototype
-
-function HilbertCurvePrototype.Visit(self: HilbertCurve, Direction: number)
+local function HilbertCurve_Visit(self: HilbertCurve, Direction: number)
 	if 
 		self.X >= 0 and self.X < self.Width and 
 		self.Y >= 0 and self.Y < self.Height 
@@ -1065,45 +1064,49 @@ function HilbertCurvePrototype.Visit(self: HilbertCurve, Direction: number)
 	end
 end
 
-function HilbertCurvePrototype.Walk(self: HilbertCurve, Direction: number)
-	if self.Level < 1 then return end
-	self.Level -= 1
-	
-	if Direction == HilbertLeft then
-		self:Walk(HilbertUp)
-		self:Visit(HilbertRight)
-		self:Walk(HilbertLeft)
-		self:Visit(HilbertDown)
-		self:Walk(HilbertLeft)
-		self:Visit(HilbertLeft)
-		self:Walk(HilbertDown)
-	elseif Direction == HilbertRight then
-		self:Walk(HilbertDown)
-		self:Visit(HilbertLeft)
-		self:Walk(HilbertRight)
-		self:Visit(HilbertUp)
-		self:Walk(HilbertRight)
-		self:Visit(HilbertRight)
-		self:Walk(HilbertUp)
-	elseif Direction == HilbertUp then
-		self:Walk(HilbertLeft)
-		self:Visit(HilbertDown)
-		self:Walk(HilbertUp)
-		self:Visit(HilbertRight)
-		self:Walk(HilbertUp)
-		self:Visit(HilbertUp)
-		self:Walk(HilbertRight)
-	elseif Direction == HilbertDown then
-		self:Walk(HilbertRight)
-		self:Visit(HilbertUp)
-		self:Walk(HilbertDown)
-		self:Visit(HilbertLeft)
-		self:Walk(HilbertDown)
-		self:Visit(HilbertDown)
-		self:Walk(HilbertLeft)
+local HilbertCurvePrototype = {
+	Walk = function(self: HilbertCurve, Direction: number)
+		if self.Level < 1 then return end
+		self.Level -= 1
+		
+		if Direction == HilbertLeft then
+			self:Walk(HilbertUp)
+			self:Visit(HilbertRight)
+			self:Walk(HilbertLeft)
+			self:Visit(HilbertDown)
+			self:Walk(HilbertLeft)
+			self:Visit(HilbertLeft)
+			self:Walk(HilbertDown)
+		elseif Direction == HilbertRight then
+			self:Walk(HilbertDown)
+			self:Visit(HilbertLeft)
+			self:Walk(HilbertRight)
+			self:Visit(HilbertUp)
+			self:Walk(HilbertRight)
+			self:Visit(HilbertRight)
+			self:Walk(HilbertUp)
+		elseif Direction == HilbertUp then
+			self:Walk(HilbertLeft)
+			self:Visit(HilbertDown)
+			self:Walk(HilbertUp)
+			self:Visit(HilbertRight)
+			self:Walk(HilbertUp)
+			self:Visit(HilbertUp)
+			self:Walk(HilbertRight)
+		elseif Direction == HilbertDown then
+			self:Walk(HilbertRight)
+			self:Visit(HilbertUp)
+			self:Walk(HilbertDown)
+			self:Visit(HilbertLeft)
+			self:Walk(HilbertDown)
+			self:Visit(HilbertDown)
+			self:Walk(HilbertLeft)
+		end
+		self.Level += 1
 	end
-	self.Level += 1
-end
+	Visit = HilbertCurve_Visit,
+}
+HilbertCurvePrototype.__index = HilbertCurvePrototype
 
 local function Dither_ErrorDiffusionRiemersma(
 	DistanceCalcuator: DistanceCalcuator,
