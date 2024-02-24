@@ -90,6 +90,28 @@ type ErrorDiffusionArrayInfo = {
 	Serpentine: boolean?,
 }
 
+type HueStatistics = {
+	InjectIntoDictionary: (self: HueStatistics, Histogram: {[number]: number}) -> (),
+	InjectIntoArray: (self: HueStatistics, Histogram: {number}) -> (),
+	Check: (self: HueStatistics, Uint32: number) -> (),
+	GroupAmount: number,
+	GroupsFull: number,
+	MinColors: number,
+	Stats: {HueGroup},
+}
+
+type HueGroup = {
+	Colors: {number},
+	Amount: number,
+}
+
+type DistanceFormulaDefaults = {
+    KR: number,
+    KG: number,
+    KB: number,
+    KA: number,   
+}
+
 type CalcuatorFunction = (
     self: DistanceCalcuator,
     R1: number,
@@ -101,13 +123,6 @@ type CalcuatorFunction = (
     B2: number,
     A2: number
 ) -> number
-
-type DistanceFormulaDefaults = {
-    KR: number,
-    KG: number,
-    KB: number,
-    KA: number,   
-}
 
 type PalettePrototype = {
 	Nearest: ((self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
@@ -244,6 +259,20 @@ local function RGBToHSL(R: number, G: number, B: number)
 	return H, S, L
 end
 
+local function HueGroup(Hue: number, Segments: number)
+	local LoopSegments = 360 / Segments
+	local Half = LoopSegments / 2
+	local Mid = LoopSegments - Half
+
+	for Index = 1, LoopSegments do
+		if Hue >= Mid and Hue < (Mid + LoopSegments) then 
+			return Index
+		end
+		Mid += LoopSegments
+	end
+	return 0
+end
+
 local function ExtractData(Data: {Color3} | EditableImage)
     if typeof(Data) == "Instance" then
         return EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
@@ -353,10 +382,10 @@ end
 
 local function BufferReadRGBA(Buffer: buffer, Index: number?)
 	local NewIndex = Index or 0
-	buffer.writeu8(Buffer, NewIndex, R)
-	buffer.writeu8(Buffer, NewIndex + 1, G)
-	buffer.writeu8(Buffer, NewIndex + 2, B)
-	buffer.writeu8(Buffer, NewIndex + 3, A)
+	buffer.readu8(Buffer, NewIndex)
+	buffer.readu8(Buffer, NewIndex + 1)
+	buffer.readu8(Buffer, NewIndex + 2)
+	buffer.readu8(Buffer, NewIndex + 3)
 end
 
 local function BufferReadUint32(Buffer: buffer)
@@ -399,20 +428,6 @@ end
 --------------------------------------------------------------------------------
 
 local HueGroups = 10
-
-local function HueGroup(Hue: number, Segments: number)
-	local LoopSegments = 360 / Segments
-	local Half = LoopSegments / 2
-	local Mid = LoopSegments - Half
-
-	for Index = 1, LoopSegments do
-		if Hue >= Mid and Hue < (Mid + LoopSegments) then 
-			return Index
-		end
-		Mid += LoopSegments
-	end
-	return 0
-end
 
 local function GetNearestIndex(
 	Palette: Palette,
@@ -1203,8 +1218,107 @@ local function Dither_NearestColor(
 end
 
 --------------------------------------------------------------------------------
+-- Hue Statistics
+--------------------------------------------------------------------------------
+
+--[[
+ * @preserve
+ * Copyright 2015-2018 Igor Bezkrovnyi
+ * All rights reserved. (MIT Licensed)
+ *
+ * hueStatistics.ts - part of Image Quantization Library
+--]]
+
+-- bad attempt at making it clear its a dictionary using {[number]: number}, but eh
+local function HueStatistics_InjectIntoDictionary(self: HueStatistics, Histogram: {[number]: number})
+	for Index, Stat in self.Stats do
+		if Stat.Amount <= self.MinColors then
+			for _, ColorUint32 in Stat.Colors do
+				if not Histogram[ColorUint32] then
+					Histogram[ColorUint32] = 1
+				else
+					Histogram[ColorUint32] += 1
+				end
+			end
+		end
+	end
+end
+
+local function HueStatistics_InjectIntoArray(self: HueStatistics, Histogram: {number})
+	for Index, Stat in self.Stats do
+		if Stat.Amount <= self.MinColors then
+			for _, ColorUint32 in Stat.Colors do
+				if not table.find(Histogram, Color) then
+					table.insert(Histogram, Color)
+				end
+			end
+		end
+	end
+end
+
+local function HueStatistics_Check(self: HueStatistics, Uint32: number)
+	--[[
+		if (this._groupsFull === this._numGroups + 1) {
+			this.check = () => {};
+	  	}
+	--]]
+	if self.GroupsFull == self.GroupAmount then return end
+
+	local R = bit32.band(Uint32, 0xff)
+	local G = bit32.band(bit32.rshift(Uint32, 8), 0xff)
+	local B = bit32.band(bit32.rshift(Uint32, 16), 0xff)
+	local H = RGBToHSL(R, G, B)
+	local HG = if R == G and G == b then
+			0
+		else
+			1 + HueGroup(H, self.GroupAmount)
+	local Min = self.MinColors
+	local GR = self.Stats[HG]
+
+	GR.Amount += 1
+
+	if GR.Amount > self.MinColors then
+		return
+	elseif GR.Amount == self.MinColors then
+		self.GroupsFull += 1
+	end
+	if GR.Amount <= self.MinColors then
+		table.insert(GR.Colors, Uint32)
+	end
+end
+
+local HueStatistics = {
+	InjectIntoDictionary = HueStatistics_InjectIntoDictionary,
+	InjectIntoArray = HueStatistics_InjectIntoArray,
+	Check = HueStatistics_Check,
+}
+HueStatistics.__index = HueStatistics
+
+local function CreateHueStatistics(GroupAmount: number, MinColors: number)
+	local Stats = table.create(GroupAmount) :: {HueGroup}
+
+	for Index = 1, GroupAmount do
+		Stats[Index] = {
+			Colors = {},
+			Amount = 0,
+		}
+	end
+
+	return setmetatable({
+		GroupAmount = GroupAmount,
+		MinColors = MinColors,
+		GroupsFull = 0,
+		Stats = Stats,
+	}, HueStatistics)
+ end
+
+--------------------------------------------------------------------------------
 -- Quantization
 --------------------------------------------------------------------------------
+
+local DefualtBoxSizeX = 64
+local DefualtBoxSizeY = 64
+local DefualtBoxPixels = 2
 
 local function Quantize(
 	Calculator: DistanceCalcuator,
@@ -1264,16 +1378,16 @@ end
    private _minHueCols: number;
  
    constructor(method: number, colors: number) {
-	 // 1 = by global population, 2 = subregion population threshold
+	 -- 1 = by global population, 2 = subregion population threshold
 	 this._method = method;
  
-	 // if > 0, enables hues stats and min-color retention per group
-	 this._minHueCols = colors << 2; // opts.minHueCols || 0;
+	 -- if > 0, enables hues stats and min-color retention per group
+	 this._minHueCols = colors << 2; -- opts.minHueCols || 0;
  
-	 // # of highest-frequency colors to start with for palette reduction
+	 -- # of highest-frequency colors to start with for palette reduction
 	 this._initColors = colors << 2;
  
-	 // HueStatistics instance
+	 -- HueStatistics instance
 	 this._hueStats = new HueStatistics(
 	   ColorHistogram._hueGroups,
 	   this._minHueCols,
