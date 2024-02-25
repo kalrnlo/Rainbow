@@ -190,9 +190,11 @@ type DistanceCalcuator = {
 }
 
 type ImageDataPrototype<T> = {
-	__iter: (self: ImageData) -> (number, number, number, number, number),
-	Iter: (self: ImageData) -> (number, number, number, number, number),
-	__len: (self: ImageData) -> number,
+	__newindex: (self: ImageData<T>, Index: number) -> (number, number, number, number),
+	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
+	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
+	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
+	__len: (self: ImageData<T>) -> number,
 }
 
 type ImageData<T> = setmetatable({} :: {
@@ -246,11 +248,6 @@ local function RGBAToUint32(R: number, G: number, B: number, A: number)
 	return bit32.rshift(
 		bit32.bor(bit32.lshift(A, 24), bit32.lshift(B, 16), bit32.lshift(G, 8), R), 0
 	)
-end
-
-local function RGBAToHex(R: number, G: number, B: number, A: number?)
-	--return string.format("#%02X%02X%02X%02X", R, G, B, math.clamp(math.floor(A * 255), 0, 255))
-	return string.format("#%02X%02X%02X", R, G, B)
 end
 
 local function RGBToHSL(R: number, G: number, B: number)
@@ -421,7 +418,7 @@ end
 -- Image Data
 --------------------------------------------------------------------------------
 
-local function ImageData_iter<T>(self: ImageData<T>)
+local function ImageData_Iter<T>(self: ImageData<T>)
 	if typeof(self.Pixels) == "table" then
 		local Length = #self.Pixels
 		local Index = 1
@@ -449,20 +446,50 @@ local function ImageData_iter<T>(self: ImageData<T>)
 			end
 
 			-- Index, R, G, B, A
-			return Index, ReadBufferRGBA(self.Pixels, Index)
+			return Index, BufferReadRGBA(self.Pixels, Index)
 		end
+	end
+end
+
+local function ImageData_Peek<T>(self: ImageData<T>, Index: number): any
+	if typeof(Index) ~= "number" then
+		error("[Quack] Index provided is not of type number")
+	end
+	if Index < 0 then
+		error("[Quack] Index cannot be less than 0")
+	end
+
+	if typeof(Index) == "number" then
+		if typeof(self.Pixels) == "table" then
+			local NewIndex = if Index ~= 1 then Index * 4 else Index
+
+			return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
+				self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
+		else
+			local NewIndex = if Index ~= 0 then Index * 4 else Index
+
+			if NewIndex > buffer.len(self.Pixels) then
+				return nil, nil, nil, nil
+			else
+				return BufferReadRGBA(self.Pixels, Index)
+			end
+		end
+	else
+		return nil, nil, nil, nil
 	end
 end
 
 
 local ImageDataPrototype = {
 	__len = GetClassLength :: any,
-	__iter = ImageData_iter,
-	Iter = ImageData_iter,
+	__newindex = ImageData_Peek,
+	__iter = ImageData_Iter,
+	Iter = ImageData_Iter,
+	Peek = ImageData_Peek,
 }
 ImageDataPrototype.__index = ImageDataPrototype
 
-local function CreateImageData(Data: EditableImage | {number} | buffer, Width: number?, Height: number?, ShouldClone: boolean?)
+local function CreateImageData(Data: EditableImage | {number} | buffer, Width: number?, Height: number?, CopyPixels: boolean?)
 	if typeof(Data) == "Instance" then
 		return setmetatable({
 			Pixels = EditableImage:ReadPixels(Vector2.new(), EditableImage.Size),
@@ -477,9 +504,10 @@ local function CreateImageData(Data: EditableImage | {number} | buffer, Width: n
 		elseif Length < 4 then
 			error("[Quack] Data provided does not include atleast 1 pixel")
 		end
+		local CopyPixels = CopyPixels or true
 		local Pixels = Data
 
-		if ShouldClone then
+		if CopyPixels then
 			if typeof(Data) == "buffer" then
 				Pixels = buffer.create(buffer.len(Data))
 				buffer.copy(Pixels, 0, Data)
@@ -495,183 +523,6 @@ local function CreateImageData(Data: EditableImage | {number} | buffer, Width: n
 			Width = Width,
 		}, ImageDataPrototype)
 	end
-end
-
---------------------------------------------------------------------------------
--- Palette
---------------------------------------------------------------------------------
-
-local HueGroups = 10
-
-local function GetNearestIndex(
-	Palette: Palette,
-	R: number,
-	G: number,
-	B: number,
-	A: number,
-)
-	local Uint32 = RGBAToUint32(R, G, B, A)
-	local CacheIndex = Palette.Uint32Indexs[Uint32]
-	if CacheIndex then 
-		return CacheIndex, R, G, B, A
-	end
-	
-	local ClosestDistance = math.huge
-	local ClosestIndex
-	local ClosestR = 0
-	local ClosestG = 0
-	local ClosestB = 0
-	local ClosestA = 0
-
-	for _, ColorBuffer in self.Colors do
-		local IndexR, IndexG, IndexB, IndexA = BufferReadRGBA(ColorBuffer)
-		local Distance = Palette.Calculator:CalculateRaw(
-			R, G, B, A, IndexR, IndexG, IndexB, IndexA
-		)
-
-		if Distance < ClosestDistance then
-			ClosestDistance = Distance
-			ClosestIndex = Index
-			ClosestR = IndexR
-			ClosestG = IndexG
-			ClosestB = IndexB
-			ClosestA = IndexA
-		end
-	end
-
-	Palette.Uint32Indexs[Uint32] = ClosestIndex
-	return ClosestIndex, ClosestR, ClosestG, ClosestB, ClosestA
-end
-
-local function GetNearestColor(
-	Palette: Palette,
-	R: number,
-	G: number,
-	B: number,
-	A: number
-): (number, number, number, number)
-	return select(2, GetNearestIndex(Palette, R, G, B, A))
-end
-
-local function Palette_Remove(self: Palette, ValueOrIndex: any, G: number?, B: number?, A: number?)
-	local Index = if ValueOrIndex and (not G and B and A) then
-			ValueOrIndex
-		else
-			GetNearestIndex(self, GetRGBA(ValueOrIndex, G, B, A))
-
-	if Index > 0 then
-		table.remove(self.Colors, Index)
-		self.Colors -= 1
-	end
-end
-
-local function Palette_Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
-
-	for _, ColorBuffer in self.Colors do
-		if BufferReadUint32(ColorBuffer) == Uint32 then 
-			return true
-		end
-	end
-	return false
-end
-
-local function Palette_Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
-	return FormatRGBA(RGBAType, GetNearestColor(self, NewR, NewG, NewB, NewA))
-end
-
-local function Palette_Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	local NewR, NewG, NewB, NewA = GetRGBA(Value, G, B, A)
-	table.insert(self.Colors, WriteOrCreateColorBuffer(NewR, NewG, NewB, NewA))
-	self.Size += 1
-end
-
-local function Palette_concat(self: Palette, String: string)
-	if not self.Colors or #self.Colors < 1 then 
-		return String
-	else
-		return `{String}{RGBAToHex(BufferReadRGBA(self.Colors[1]))}`
-	end
-end
-
-local function Palette_tostring(self: Palette)
-	if not self.Colors or #self.Colors < 1 then 
-		return "#000000"
-	else
-		return RGBAToHex(BufferReadRGBA(self.Colors[1]))
-	end
-end
-
--- TODO: group very low lum and very high lum colors
--- TODO: pass custom sort order
--- TODO: sort criteria function should be placed to HueStats class
--- note: > 0 is basically how you convert js sort to lua easily
--- its what robloxs luau polyfill does for its array.sort
-local function Palette_Sort(self: Palette)
-	table.clear(self.Uint32Indexs)
-
-	table.sort(self.Colors, function(A, B)
-		local AR, AG, AB, AA = BufferReadRGBA(A)
-		local BR, BG, BB, BA = BufferReadRGBA(B)
-		local AH, AS, AL = RGBToHSL(AR, AG, AB)
-		local BH, BS, BL = RGBToHSL(BR, BG, BB)
-	
-		-- sort all grays + whites together
-		local HueA = if AR == AG and AG == AB then 0 else 1 + HueGroup(AH, HueGroups)
-		local HueB = if BR == BG and BG == BB then 0 else 1 + HueGroup(BH, HueGroups)
-		local HueDiff = HueB - HueA
-	
-		if HueDiff > 0 then return -HueDiff > 0 end
-		local LumA = GetRGBALuminosity(AR, AG, AB, AA)
-		local LumB = GetRGBALuminosity(BR, BG, BB, BA)
-		local LumDiff = LumB - LumA
-
-		if LumDiff ~= 0 then return LumDiff > 0
-		local ASat = AS * 100
-		local BSat = BS * 100
-		local SatDiff = (if BSat > 0 then BSat else 0) - (if ASat > 0 then ASat else 0)
-
-		if SatDiff > 0 then
-			return -SatDiff > 0
-		else
-			return false
-		end
-	end)
-end
-
-local PalettePrototype = {
-	__len = GetClassLength :: any,
-	__tostring = Palette_tostring,
-	Contains = Palette_Contains,
-	__concat = Palette_concat,
-	Nearest = Palette_Nearest,
-	Remove = Palette_Remove,
-	Sort = Palette_Sort,
-	Add = Palette_Add,
-}
-PalettePrototype.__index = PalettePrototype
-
-type PaletteInfo = {
-	DistanceFormula: DistanceFormula?,
-	Calculator: DistanceCalcuator?,
-	MaxColors: number?,
-	R: number,
-	G: number,
-	B: number,
-	A: number,
-}
-
-local function CreatePalette(Options: PaletteInfo)
-	return setmetatable({
-		Colors = if Options.Size then table.create(Options.Size) else {},		
-		Calculator = CreateCalcuator(
-			Options.DistanceFormula or "ManhattanBT709", 
-			Options.R, Options.G, Options.B, Options.A
-		),
-		Size = Options.Size or 0,
-		Uint32Indexs = {},
-	}, PalettePrototype)
 end
 
 --------------------------------------------------------------------------------
@@ -925,6 +776,177 @@ local function CreateCalcuator(
 end
 
 --------------------------------------------------------------------------------
+-- Palette
+--------------------------------------------------------------------------------
+
+local HexFormatString = "#%02X%02X%02X"
+local HueGroups = 10
+
+local function GetNearestIndex(
+	Palette: Palette,
+	R: number,
+	G: number,
+	B: number,
+	A: number,
+)
+	local Uint32 = RGBAToUint32(R, G, B, A)
+	local CacheIndex = Palette.Uint32Indexs[Uint32]
+	if CacheIndex then 
+		return CacheIndex, R, G, B, A
+	end
+	
+	local ClosestDistance = math.huge
+	local ClosestIndex
+	local ClosestR = 0
+	local ClosestG = 0
+	local ClosestB = 0
+	local ClosestA = 0
+
+	for _, ColorBuffer in self.Colors do
+		local IndexR, IndexG, IndexB, IndexA = BufferReadRGBA(ColorBuffer)
+		local Distance = Palette.Calculator:CalculateRaw(
+			R, G, B, A, IndexR, IndexG, IndexB, IndexA
+		)
+
+		if Distance < ClosestDistance then
+			ClosestDistance = Distance
+			ClosestIndex = Index
+			ClosestR = IndexR
+			ClosestG = IndexG
+			ClosestB = IndexB
+			ClosestA = IndexA
+		end
+	end
+
+	Palette.Uint32Indexs[Uint32] = ClosestIndex
+	return ClosestIndex, ClosestR, ClosestG, ClosestB, ClosestA
+end
+
+local function GetNearestColor(
+	Palette: Palette,
+	R: number,
+	G: number,
+	B: number,
+	A: number
+): (number, number, number, number)
+	return select(2, GetNearestIndex(Palette, R, G, B, A))
+end
+
+local function Palette_Remove(self: Palette, ValueOrIndex: any, G: number?, B: number?, A: number?)
+	local Index = if ValueOrIndex and (not G and B and A) then
+			ValueOrIndex :: number
+		else
+			GetNearestIndex(self, GetRGBA(ValueOrIndex, G, B, A))
+
+	if Index > 0 then
+		self.Uint32Indexs[BufferReadUint32(self.Colors[ValueOrIndex])] = nil
+		table.remove(self.Colors, Index)
+		self.Colors -= 1
+	end
+end
+
+local function Palette_Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
+	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
+
+	for _, ColorBuffer in self.Colors do
+		if BufferReadUint32(ColorBuffer) == Uint32 then 
+			return true
+		end
+	end
+	return false
+end
+
+local function Palette_Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
+	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
+	return FormatRGBA(RGBAType, GetNearestColor(self, NewR, NewG, NewB, NewA))
+end
+
+local function Palette_Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
+	local NewR, NewG, NewB, NewA = GetRGBA(Value, G, B, A)
+	table.insert(self.Colors, WriteOrCreateColorBuffer(NewR, NewG, NewB, NewA))
+	self.Size += 1
+end
+
+local function Palette_concat(self: Palette, String: string)
+	if not self.Colors or #self.Colors < 1 then 
+		return String
+	else
+		local R, G, B = BufferReadRGBA(self.Colors[1])
+		return `{String}{string.format(HexFormatString, R, G, B)}`
+	end
+end
+
+local function Palette_tostring(self: Palette)
+	if not self.Colors or #self.Colors < 1 then 
+		return "#000000"
+	else
+		local R, G, B = BufferReadRGBA(self.Colors[1])
+		return string.format(HexFormatString, R, G, B)
+	end
+end
+
+-- TODO: group very low lum and very high lum colors
+-- TODO: pass custom sort order
+-- TODO: sort criteria function should be placed to HueStats class
+-- note: > 0 is basically how you convert js sort to lua easily
+-- its what robloxs luau polyfill does for its array.sort
+local function Palette_Sort(self: Palette)
+	table.clear(self.Uint32Indexs)
+
+	table.sort(self.Colors, function(A, B)
+		local AR, AG, AB, AA = BufferReadRGBA(A)
+		local BR, BG, BB, BA = BufferReadRGBA(B)
+		local AH, AS, AL = RGBToHSL(AR, AG, AB)
+		local BH, BS, BL = RGBToHSL(BR, BG, BB)
+	
+		-- sort all grays + whites together
+		local HueA = if AR == AG and AG == AB then 0 else 1 + HueGroup(AH, HueGroups)
+		local HueB = if BR == BG and BG == BB then 0 else 1 + HueGroup(BH, HueGroups)
+		local HueDiff = HueB - HueA
+	
+		if HueDiff > 0 then return -HueDiff > 0 end
+		local LumA = GetRGBALuminosity(AR, AG, AB, AA)
+		local LumB = GetRGBALuminosity(BR, BG, BB, BA)
+		local LumDiff = LumB - LumA
+
+		if LumDiff ~= 0 then return LumDiff > 0
+		local ASat = AS * 100
+		local BSat = BS * 100
+		local SatDiff = (if BSat > 0 then BSat else 0) - (if ASat > 0 then ASat else 0)
+
+		if SatDiff > 0 then
+			return -SatDiff > 0
+		else
+			return false
+		end
+	end)
+end
+
+local PalettePrototype = {
+	__len = GetClassLength :: any,
+	__tostring = Palette_tostring,
+	Contains = Palette_Contains,
+	__concat = Palette_concat,
+	Nearest = Palette_Nearest,
+	Remove = Palette_Remove,
+	Sort = Palette_Sort,
+	Add = Palette_Add,
+}
+PalettePrototype.__index = PalettePrototype
+
+local function CreatePalette(Options: PaletteInfo): Palette
+	return setmetatable({
+		Colors = if Options.Size then table.create(Options.Size) else {},		
+		Calculator = CreateCalcuator(
+			Options.DistanceFormula or "ManhattanBT709", 
+			Options.R, Options.G, Options.B, Options.A
+		),
+		Size = Options.Size or 0,
+		Uint32Indexs = {},
+	}, PalettePrototype) :: any
+end
+
+--------------------------------------------------------------------------------
 -- Dithering
 --------------------------------------------------------------------------------
 
@@ -1103,7 +1125,7 @@ local function Dither_ErrorDiffusionArray(
 		for X = XStart, XEnd, Dir do
 			-- Image pixel
 			local ColorBuffer = ImageData.Pixels[Index]
-			local R, G, B, A = ReadBufferRGBA(ColorBuffer)
+			local R, G, B, A = BufferReadRGBA(ColorBuffer)
 			local Error = ErrorLine[X]
 
 			local CorrectedR = math.clamp(R + Error[1], 0, 255)
@@ -1261,7 +1283,7 @@ local function Dither_ErrorDiffusionRiemersma(
 		Callback = function(X, Y)
 			local PixelIndex = (X + Y) * Width
 			local ColorBuffer = ImageData.Pixels[PixelIndex]
-			local R, G, B, A = ReadBufferRGBA(ColorBuffer)
+			local R, G, B, A = BufferReadRGBA(ColorBuffer)
 	
 			for Index, Weight in Weights do
 				local Error = ErrorQueue[(Index + Head) % ErrorQueueSize]
@@ -1320,7 +1342,7 @@ local function Dither_NearestColor(
 
 			-- Reduced pixel
 			ImageData.Pixels[Index] = WriteOrCreateColorBuffer(
-				GetNearestColor(Palette, ReadBufferRGBA(ColorBuffer)), ColorBuffer
+				GetNearestColor(Palette, BufferReadRGBA(ColorBuffer)), ColorBuffer
 			)
 			Index += 1
 		end
@@ -1366,13 +1388,13 @@ local function HueStatistics_InjectIntoArray(self: HueStatistics, Histogram: {nu
 	end
 end
 
-local function HueStatistics_Check(self: HueStatistics, Uint32: number)
+local function CheckHueStatistics(HueStatistics: HueStatistics, Uint32: number)
 	--[[
 		if (this._groupsFull === this._numGroups + 1) {
 			this.check = () => {};
 	  	}
 	--]]
-	if self.GroupsFull == self.GroupAmount then return end
+	if HueStatistics.GroupsFull == HueStatistics.GroupAmount then return end
 
 	local R = bit32.band(Uint32, 0xff)
 	local G = bit32.band(bit32.rshift(Uint32, 8), 0xff)
@@ -1381,18 +1403,18 @@ local function HueStatistics_Check(self: HueStatistics, Uint32: number)
 	local HG = if R == G and G == b then
 			0
 		else
-			1 + HueGroup(H, self.GroupAmount)
-	local Min = self.MinColors
-	local GR = self.Stats[HG]
+			1 + HueGroup(H, HueStatistics.GroupAmount)
+	local Min = HueStatistics.MinColors
+	local GR = HueStatistics.Stats[HG]
 
 	GR.Amount += 1
 
-	if GR.Amount > self.MinColors then
+	if GR.Amount > HueStatistics.MinColors then
 		return
-	elseif GR.Amount == self.MinColors then
-		self.GroupsFull += 1
+	elseif GR.Amount == HueStatistics.MinColors then
+		HueStatistics.GroupsFull += 1
 	end
-	if GR.Amount <= self.MinColors then
+	if GR.Amount <= HueStatistics.MinColors then
 		table.insert(GR.Colors, Uint32)
 	end
 end
@@ -1400,7 +1422,7 @@ end
 local HueStatistics = {
 	InjectIntoDictionary = HueStatistics_InjectIntoDictionary,
 	InjectIntoArray = HueStatistics_InjectIntoArray,
-	Check = HueStatistics_Check,
+	Check = CheckHueStatistics,
 }
 HueStatistics.__index = HueStatistics
 
@@ -1874,49 +1896,26 @@ export class RGBQuant extends AbstractPaletteQuantizer {
   }
 }
 
-type PaletteInfo = {
-	DistanceFormula: DistanceFormula?,
-	Calculator: DistanceCalcuator?,
-	MaxColors: number?,
-	R: number,
-	G: number,
-	B: number,
-	A: number,
-}
-
-local function CreatePalette(Options: PaletteInfo)
-	return setmetatable({
-		Colors = if Options.Size then table.create(Options.Size) else {},		
-		Calculator = CreateCalcuator(
-			Options.DistanceFormula or "ManhattanBT709", 
-			Options.R, Options.G, Options.B, Options.A
-		),
-		Size = Options.Size or 0,
-		Uint32Indexs = {},
-	}, PalettePrototype)
-end
-
+-- A defualt palette thats included for easily doing quantization to make an
+-- images colors all become greyscale stuffs
 local GreyscalePalette = setmetatable({
-	Calculator = CreateCalcuator("EuclideanBT709")
+	Calculator = table.freeze(CreateCalcuator("EuclideanBT709")),
 	Colors = table.create(2),
 	Uint32Indexs = {},
 	Size = 2,
 }, PalettePrototype)
+
 GreyscalePalette.Colors[1] = WriteOrCreateColorBuffer(0, 0, 0, 255)
 GreyscalePalette.Colors[2] = WriteOrCreateColorBuffer(255, 255, 255, 0)
-
-table.freeze(GreyscalePalette.Calculator)
 table.freeze(GreyscalePalette.Colors)
 table.freeze(GreyscalePalette)
 
 local Exports = table.freeze({
-	ImageData = CreateImageData :: ((Pixels: {number}, Width: number, Height: number, ShouldClone: boolean?) -> ImageData<{number}>) &
-		((Pixels: buffer, Width: number, Height: number, ShouldClone: boolean?) -> ImageData<buffer>) &
+	ImageData = CreateImageData :: ((Pixels: {number}, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<{number}>) &
+		((Pixels: buffer, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<buffer>) &
 		((EditableImage: EditableImage) -> ImageData<{number}>),
-	Palette = table.freeze({
-		Greyscale = GreyscalePalette,
-		new = CreatePalette,
-	}),
+	Greyscale = GreyscalePalette,
+	Palette = CreatePalette,
 })
 
 return Exports
