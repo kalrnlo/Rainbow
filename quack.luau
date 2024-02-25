@@ -58,11 +58,6 @@ type Method = "GlobalPopulation" | "SubRegionPopulation"
 
 type RGBAType = "buffer" | "table" | "Color3" | "number"
 
-type Palletize = ((Image: ImageData, Options: PalletizeInfo) -> Palette<{}>) &
-	((Images: {ImageData}, Options: PalletizeInfo) -> Palette<{}>) &
-	((EditableImage: EditableImage, Options: PalletizeInfo) -> Palette<number>) &
-	((EditableImages: {EditableImage}, Options: PalletizeInfo) -> Palette<number>)
-
 type PalletizeInfo = {
 	DistanceFormula: ("Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
 		"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant")?,
@@ -122,19 +117,6 @@ type DistanceFormulaDefaults = {
     KA: number,   
 }
 
-type CalcuatorFunction = (
-    self: DistanceCalcuator,
-    R1: number,
-    G1: number,
-    B1: number,
-    A1: number,
-    R2: number,
-    G2: number,
-    B2: number,
-    A2: number
-) -> number
-
-
 type ImageDataPrototype<T> = {
 	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
 	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
@@ -182,16 +164,17 @@ type ImageData<T> = setmetatable({} :: {
 	Size: number,
 }, {} :: ImageDataPrototype<T>)
 
-type HilbertCurve = {
-	Visit: (self: HilbertCurve, Direction: number) -> (),
-	Walk: (self: HilbertCurve, Direction: number) -> (),
-	Callback: (X: number, Y: number) -> (),
-	Height: number,
-	Width: number,
-	Level: number,
-	X: number,
-	Y: number,
-}
+type CalcuatorFunction = (
+    self: DistanceCalcuator,
+    R1: number,
+    G1: number,
+    B1: number,
+    A1: number,
+    R2: number,
+    G2: number,
+    B2: number,
+    A2: number
+) -> number
 
 type DistanceCalcuator = {
 	CalcuateNormalized: CalcuatorFunction,
@@ -201,6 +184,17 @@ type DistanceCalcuator = {
     WhitepointG: number,
     WhitepointB: number,
     WhitepointA: number,
+}
+
+type HilbertCurve = {
+	Visit: (self: HilbertCurve, Direction: number) -> (),
+	Walk: (self: HilbertCurve, Direction: number) -> (),
+	Callback: (X: number, Y: number) -> (),
+	Height: number,
+	Width: number,
+	Level: number,
+	X: number,
+	Y: number,
 }
 
 -- sRGB (based on ITU-R Recommendation BT.709)
