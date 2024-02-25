@@ -9,18 +9,17 @@
 -- 18/02/2024
 
 --[[
-local Image1 = Quant.ExtractData(EditableImage)
-local Image2 = Quack.ExtractData(EditableImage)
-local Image3 = Quack.ExtractData(EditableImage)
+local Image = Quant.ImageData.new(EditableImage)
 
-Quack.Calcuator("Manhattan", 255, 255, 255, 0)
+-- Palette class has an iterator like this aswell
+for Index, R, G, B, A in Image1 do
+	print(`Pixel({Index}) {R}, {G}, {B}, {A}`)
+end
 
-Quack.PalettizeAsync(table.pack(Image1, Image2, Image3), {
-	DistanceFormula = "Manhattan",
-	Colors = 256
-}):After(function(Palette)
-	print(Palette.Colors[1])
-end)
+-- class for calcuating color distance
+local DistanceCalculator = Quack.Calcuator("Manhattan", 255, 255, 255, 0)
+DistanceCalculator:CalculateNormalized(230, 240, 255, 0, 255, 255, 255, 1)
+DistanceCalculator:CalculateRaw(230, 240, 255, 0, 255, 255, 255, 1)
 
 local ImageData = Quack.Dither("FloydSteinberg", Palette, {Image, Image2})
 local ImageData = Quack.Dither("FloydSteinberg", Palette, Image)
@@ -177,9 +176,9 @@ type CalcuatorFunction = (
 ) -> number
 
 type DistanceCalcuator = {
-	CalcuateNormalized: CalcuatorFunction,
+	calcuate_normalized: CalcuatorFunction,
     Defualts: DistanceFormulaDefaults,
-    CalculateRaw: CalcuatorFunction,
+    calculate_raw: CalcuatorFunction,
     WhitepointR: number,
     WhitepointG: number,
     WhitepointB: number,
@@ -1914,8 +1913,13 @@ local Exports = table.freeze({
 	ImageData = CreateImageData :: ((Pixels: {number}, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<{number}>) &
 		((Pixels: buffer, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<buffer>) &
 		((EditableImage: EditableImage) -> ImageData<{number}>),
-	Greyscale = GreyscalePalette,
+	Calculator = CreateCalcuator :: ((DistanceFormula: DistanceFormula) -> DistanceCalcuator) &
+			((DistanceFormula: DistanceFormula, R: number, G: number, B: number, A: number) -> DistanceCalcuator),
 	Palette = CreatePalette,
+
+	Palettes = table.freeze({
+		Greyscale = GreyscalePalette,
+	}),
 })
 
 return Exports
