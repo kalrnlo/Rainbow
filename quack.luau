@@ -173,11 +173,20 @@ type DistanceCalcuator = {
     WhitepointA: number,
 }
 
-type ImageData = {
+type ImageDataPrototype = {
+	__iter: (self: ImageData) -> (number, number, number, number, number),
+	Iter: (self: ImageData) -> (number, number, number, number, number)
+}
+
+type ImageData = setmetatable({} :: ({
+	Pixels: {number},
+	Height: number,
+	Width: number,
+} | {
 	Pixels: buffer,
 	Height: number,
 	Width: number,
-}
+}), {} :: ImageDataPrototype)
 
 type BufferComparator = (A: buffer, B: buffer) -> boolean
 
@@ -421,6 +430,79 @@ local function BufferWriteRGBA(
 	buffer.writeu8(Buffer, NewIndex + 1, G)
 	buffer.writeu8(Buffer, NewIndex + 2, B)
 	buffer.writeu8(Buffer, NewIndex + 3, A)
+end
+
+--------------------------------------------------------------------------------
+-- Image Data
+--------------------------------------------------------------------------------
+
+local function ImageData_iter(self: ImageData)
+	if typeof(self.Pixels) == "table" then
+		local Length = #self.Pixels
+		local Index = 1
+
+		return function()
+			Index = if Index ~= 1 then Index + 4 else Index
+
+			if Index > Length then
+				error("[Quack] ImageData iterator tried to go out of bounds")
+			end
+
+			-- Index, R, G, B, A
+			return Index, self.Pixels[Index], self.Pixels[Index + 1],
+				self.Pixels[Index + 2], self.Pixels[Index + 3]
+		end
+	else
+		local Length = buffer.len(self.Pixels)
+		local Index = 0
+
+		return function()
+			Index = if Index ~= 0 then Index + 4 else Index
+			
+			if Index > Length then
+				error("[Quack] ImageData iterator tried to go out of bounds")
+			end
+
+			-- Index, R, G, B, A
+			return Index, ReadBufferRGBA(self.Pixels, Index)
+		end
+	end
+end
+
+local ImageDataPrototype = {
+	__iter = ImageData_iter,
+	Iter = ImageData_iter,
+}
+ImageDataPrototype.__index = ImageDataPrototype
+
+local function CreateImageData(Data: EditableImage | {number} | buffer, Width: number?, Height: number?, ShouldClone: boolean?)
+	if typeof(Data) == "Instance" then
+		return setmetatable({
+			Pixels = EditableImage:ReadPixels(Vector2.new(), EditableImage.Size),
+			Height = EditableImage.Size.Y,
+			Width = EditableImage.Size.X,
+		}, ImageDataPrototype)
+	else
+		if not Width or Height then
+			error("[Quack] Cannot create ImageData for array or buffer, without Width or Height provided")
+		end
+		local Pixels = Data
+
+		if ShouldClone then
+			if typeof(Data) == "buffer" then
+				Pixels = buffer.create(buffer.len(Data))
+				buffer.copy(Pixels, 0, Data)
+			else
+				Pixels = table.clone(Data)
+			end
+		end
+
+		return setmetatable({
+			Pixels = Pixels,
+			Height = Height,
+			Width = Width,
+		}, ImageDataPrototype)
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -1313,27 +1395,10 @@ local function CreateHueStatistics(GroupAmount: number, MinColors: number)
  end
 
 --------------------------------------------------------------------------------
--- Quantization
+-- Histogram
 --------------------------------------------------------------------------------
 
-local DefualtBoxSizeX = 64
-local DefualtBoxSizeY = 64
-local DefualtBoxPixels = 2
-
-local function Quantize(
-	Calculator: DistanceCalcuator,
-	Method: Method,
-	Colors: number
-)
-	-- # of highest-frequency colors to start with for palette reduction
-	local InitalColors = bit32.lshift(Colors, 2)
-	-- if > 0, enables hues stats and min-color retention per group
-	local MinHueCols = bit32.lshift(Colors, 2)
-
-
-end
-
-/*
+--[[
  * Copyright (c) 2015, Leon Sorokin
  * All rights reserved. (MIT Licensed)
  *
@@ -1346,7 +1411,12 @@ end
  * All rights reserved. (MIT Licensed)
  *
  * colorHistogram.ts - part of Image Quantization Library
- */
+ --]]
+
+local DefualtBoxSizeX = 64
+local DefualtBoxSizeY = 64
+local DefualtBoxPixels = 2
+
  import { HueStatistics } from '../../utils/hueStatistics';
  import { PointContainer } from '../../utils/pointContainer';
  import { stableSort } from '../../utils/arithmetic';
@@ -1448,13 +1518,19 @@ end
 	 -- int32-ify values
 	 return idxi32.map((v) => +v);
    }
- 
-   // global top-population
-   private _colorStats1D(pointContainer: PointContainer) {
-	 const histG = this._histogram;
+
+   -- global top-population
+local function ColorStats1D(
+	ImageData: ImageData,
+	Histogram: {number},
+	HueStats: HueStatistics
+)
+const histG = this._histogram;
 	 const pointArray = pointContainer.getPointArray();
 	 const len = pointArray.length;
  
+	for _, Color
+
 	 for (let i = 0; i < len; i++) {
 	   const col = pointArray[i].uint32;
  
@@ -1467,12 +1543,19 @@ end
 		 histG[col] = 1;
 	   }
 	 }
-   }
- 
-   -- population threshold within subregions
-   -- FIXME: this can over-reduce (few/no colors same?), need a way to keep
-   -- important colors that dont ever reach local thresholds (gradients?)
-   private _colorStats2D(pointContainer: PointContainer) {
+end
+
+-- population threshold within subregions
+-- FIXME: this can over-reduce (few/no colors same?), need a way to keep
+-- important colors that dont ever reach local thresholds (gradients?)
+local function ColorStats2D(
+	ImageData: ImageData,
+	Histogram: {number},
+	HueStats: HueStatistics,
+	BoxPixels: number,
+	BoxWidth: number,
+	BoxHeight: number
+) 
 	 const width = pointContainer.getWidth();
 	 const height = pointContainer.getHeight();
 	 const pointArray = pointContainer.getPointArray();
@@ -1509,6 +1592,7 @@ end
 	 // inject min huegroup colors
 	 this._hueStats.injectIntoDictionary(histG);
    }
+end
  
    // iterates @bbox within a parent rect of width @wid; calls @fn, passing index within parent
    private _iterateBox(bbox: Box, wid: number, fn: (i: number) => void) {
@@ -1556,6 +1640,26 @@ end
 	 return boxesArray;
    }
  }
+
+--------------------------------------------------------------------------------
+-- Quantization
+--------------------------------------------------------------------------------
+
+local DistanceIncrement = 0.005
+local InitalDistance = 0.01
+
+local function Quantize(
+	Calculator: DistanceCalcuator,
+	Method: Method,
+	Colors: number
+)
+	-- # of highest-frequency colors to start with for palette reduction
+	local InitalColors = bit32.lshift(Colors, 2)
+	-- if > 0, enables hues stats and min-color retention per group
+	local MinHueCols = bit32.lshift(Colors, 2)
+
+
+end
 
  /*
  * Copyright (c) 2015, Leon Sorokin
