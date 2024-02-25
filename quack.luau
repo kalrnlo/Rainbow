@@ -100,6 +100,16 @@ type HueStatistics = {
 	Stats: {HueGroup},
 }
 
+type PaletteInfo = {
+	DistanceFormula: DistanceFormula?,
+	Calculator: DistanceCalcuator?,
+	MaxColors: number?,
+	R: number,
+	G: number,
+	B: number,
+	A: number,
+}
+
 type HueGroup = {
 	Colors: {number},
 	Amount: number,
@@ -132,7 +142,12 @@ type PalettePrototype = {
 	Contains: ((self: Palette, R: number, G: number, B: number, A: number?) -> boolean) &
 		((self: Palette, Color3: Color3) -> boolean) &
 		((self: Palette, RGBOrRGBA: {number}) -> boolean) &
-		((self: Palette, RGBOrRGBA: buffer) -> boolean),	
+		((self: Palette, RGBOrRGBA: buffer) -> boolean),
+	Remove: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
+		((self: Palette, Color3: Color3) -> ()) &
+		((self: Palette, RGBOrRGBA: {number}) -> ()) &
+		((self: Palette, RGBOrRGBA: buffer) -> ()) &
+		((self: Palette, Index: number) -> ()),
 	Add: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
 		((self: Palette, Color3: Color3) -> ()) &
 		((self: Palette, RGBOrRGBA: {number}) -> ()) &
@@ -150,6 +165,7 @@ type Palette = typeof(setmetatable({} :: {
 	Calcuator: DistanceCalcuator,
 	Uint32Indexs: {number},
 	Colors: {buffer},
+	Size: number,
 }, {} :: PalettePrototype))
 
 type HilbertCurve = {
@@ -173,20 +189,18 @@ type DistanceCalcuator = {
     WhitepointA: number,
 }
 
-type ImageDataPrototype = {
+type ImageDataPrototype<T> = {
 	__iter: (self: ImageData) -> (number, number, number, number, number),
-	Iter: (self: ImageData) -> (number, number, number, number, number)
+	Iter: (self: ImageData) -> (number, number, number, number, number),
+	__len: (self: ImageData) -> number,
 }
 
-type ImageData = setmetatable({} :: ({
-	Pixels: {number},
+type ImageData<T> = setmetatable({} :: {
+	Pixels: T & ({number} | buffer),
 	Height: number,
 	Width: number,
-} | {
-	Pixels: buffer,
-	Height: number,
-	Width: number,
-}), {} :: ImageDataPrototype)
+	Size: number,
+}, {} :: ImageDataPrototype<T>)
 
 type BufferComparator = (A: buffer, B: buffer) -> boolean
 
@@ -282,24 +296,6 @@ local function HueGroup(Hue: number, Segments: number)
 	return 0
 end
 
-local function ExtractData(Data: {Color3} | EditableImage)
-    if typeof(Data) == "Instance" then
-        return EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
-    elseif #Data > 0 then
-        local NewData = table.create(#Data * 4, 0)
-
-        for Index, Color3 in Data do
-            local NewIndex = if Index ~= 1 then Index * 4 else 1
-            NewData[NewIndex] = math.clamp((Color3.R * 255), 0, 255)
-            NewData[NewIndex + 1] = math.clamp((Color3.G * 255), 0, 255)
-            NewData[NewIndex + 2] = math.clamp((Color3.B * 255), 0, 255)
-        end
-        return NewData
-    else
-        error("[Quack] Extract data failed, array provided may have had 0 indexs")
-    end
-end
-
 local function FormatRGBA(RGBAType: RGBAType, R: number, G: number, B: number, A: number): any
 	if RGBAType == "number" then
 		return R, G, B, A
@@ -370,24 +366,13 @@ local function GetRGBA(
 	end
 end
 
+local function GetClassLength<T>(self: T & {Size: number})
+	return self.Size
+end
+
 --------------------------------------------------------------------------------
 -- Buffer
 --------------------------------------------------------------------------------
-
---[[
-local function BufferAlloc(Buffer: buffer, Index: number, Increment: number)
-	local OldLength = buffer.len(Buffer)
-	local NewLength = Index + Increment
-
-	if OldLength < NewLength then
-		local NewBuffer = buffer.create(math.floor(OldLength ^ 1.5))
-		buffer.copy(NewBuffer, 0, Buffer)
-		return NewBuffer
-	else
-		return Buffer
-	end
-end
---]]
 
 local function BufferReadRGBA(Buffer: buffer, Index: number?)
 	local NewIndex = Index or 0
@@ -436,7 +421,7 @@ end
 -- Image Data
 --------------------------------------------------------------------------------
 
-local function ImageData_iter(self: ImageData)
+local function ImageData_iter<T>(self: ImageData<T>)
 	if typeof(self.Pixels) == "table" then
 		local Length = #self.Pixels
 		local Index = 1
@@ -469,7 +454,9 @@ local function ImageData_iter(self: ImageData)
 	end
 end
 
+
 local ImageDataPrototype = {
+	__len = GetClassLength :: any,
 	__iter = ImageData_iter,
 	Iter = ImageData_iter,
 }
@@ -483,8 +470,12 @@ local function CreateImageData(Data: EditableImage | {number} | buffer, Width: n
 			Width = EditableImage.Size.X,
 		}, ImageDataPrototype)
 	else
+		local Length = if typeof(Data) == "table" then #Data else buffer.len(Data)
+
 		if not Width or Height then
 			error("[Quack] Cannot create ImageData for array or buffer, without Width or Height provided")
+		elseif Length < 4 then
+			error("[Quack] Data provided does not include atleast 1 pixel")
 		end
 		local Pixels = Data
 
@@ -498,6 +489,7 @@ local function CreateImageData(Data: EditableImage | {number} | buffer, Width: n
 		end
 
 		return setmetatable({
+			Size = Length / 4,
 			Pixels = Pixels,
 			Height = Height,
 			Width = Width,
@@ -561,6 +553,18 @@ local function GetNearestColor(
 	return select(2, GetNearestIndex(Palette, R, G, B, A))
 end
 
+local function Palette_Remove(self: Palette, ValueOrIndex: any, G: number?, B: number?, A: number?)
+	local Index = if ValueOrIndex and (not G and B and A) then
+			ValueOrIndex
+		else
+			GetNearestIndex(self, GetRGBA(ValueOrIndex, G, B, A))
+
+	if Index > 0 then
+		table.remove(self.Colors, Index)
+		self.Colors -= 1
+	end
+end
+
 local function Palette_Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
 
@@ -580,6 +584,7 @@ end
 local function Palette_Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local NewR, NewG, NewB, NewA = GetRGBA(Value, G, B, A)
 	table.insert(self.Colors, WriteOrCreateColorBuffer(NewR, NewG, NewB, NewA))
+	self.Size += 1
 end
 
 local function Palette_concat(self: Palette, String: string)
@@ -635,20 +640,39 @@ local function Palette_Sort(self: Palette)
 	end)
 end
 
-local function Palette_len(self: Palette)
-	return #self.Colors
-end
-
 local PalettePrototype = {
+	__len = GetClassLength :: any,
 	__tostring = Palette_tostring,
 	Contains = Palette_Contains,
 	__concat = Palette_concat,
 	Nearest = Palette_Nearest,
+	Remove = Palette_Remove,
 	Sort = Palette_Sort,
-	__len = Palette_len,
 	Add = Palette_Add,
 }
 PalettePrototype.__index = PalettePrototype
+
+type PaletteInfo = {
+	DistanceFormula: DistanceFormula?,
+	Calculator: DistanceCalcuator?,
+	MaxColors: number?,
+	R: number,
+	G: number,
+	B: number,
+	A: number,
+}
+
+local function CreatePalette(Options: PaletteInfo)
+	return setmetatable({
+		Colors = if Options.Size then table.create(Options.Size) else {},		
+		Calculator = CreateCalcuator(
+			Options.DistanceFormula or "ManhattanBT709", 
+			Options.R, Options.G, Options.B, Options.A
+		),
+		Size = Options.Size or 0,
+		Uint32Indexs = {},
+	}, PalettePrototype)
+end
 
 --------------------------------------------------------------------------------
 -- Distance
@@ -874,15 +898,19 @@ CalcuatorPrototype.__index = CalcuatorPrototype
 
 local function CreateCalcuator(
     DistanceFormula: DistanceFormula,
-    R: number,
-    G: number,
-    B: number,
-    A: number
+    R: number?,
+    G: number?,
+    B: number?,
+    A: number?
 )
     local Calcuator = Calcuators[DistanceFormula]
     if not Calcuator then
         error(`[Quack] No distance calcuator exists for {DistanceFormula}`)
     end
+	local R = R or 255
+	local G = G or 255
+	local B = B or 255
+	local A = A or 255
 
     local self = setmetatable({
         WhitepointR = if R > 0 then 255 / R else 0,
@@ -1845,3 +1873,50 @@ export class RGBQuant extends AbstractPaletteQuantizer {
     palette.sort();
   }
 }
+
+type PaletteInfo = {
+	DistanceFormula: DistanceFormula?,
+	Calculator: DistanceCalcuator?,
+	MaxColors: number?,
+	R: number,
+	G: number,
+	B: number,
+	A: number,
+}
+
+local function CreatePalette(Options: PaletteInfo)
+	return setmetatable({
+		Colors = if Options.Size then table.create(Options.Size) else {},		
+		Calculator = CreateCalcuator(
+			Options.DistanceFormula or "ManhattanBT709", 
+			Options.R, Options.G, Options.B, Options.A
+		),
+		Size = Options.Size or 0,
+		Uint32Indexs = {},
+	}, PalettePrototype)
+end
+
+local GreyscalePalette = setmetatable({
+	Calculator = CreateCalcuator("EuclideanBT709")
+	Colors = table.create(2),
+	Uint32Indexs = {},
+	Size = 2,
+}, PalettePrototype)
+GreyscalePalette.Colors[1] = WriteOrCreateColorBuffer(0, 0, 0, 255)
+GreyscalePalette.Colors[2] = WriteOrCreateColorBuffer(255, 255, 255, 0)
+
+table.freeze(GreyscalePalette.Calculator)
+table.freeze(GreyscalePalette.Colors)
+table.freeze(GreyscalePalette)
+
+local Exports = table.freeze({
+	ImageData = CreateImageData :: ((Pixels: {number}, Width: number, Height: number, ShouldClone: boolean?) -> ImageData<{number}>) &
+		((Pixels: buffer, Width: number, Height: number, ShouldClone: boolean?) -> ImageData<buffer>) &
+		((EditableImage: EditableImage) -> ImageData<{number}>),
+	Palette = table.freeze({
+		Greyscale = GreyscalePalette,
+		new = CreatePalette,
+	}),
+})
+
+return Exports
