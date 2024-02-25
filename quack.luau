@@ -134,6 +134,14 @@ type CalcuatorFunction = (
     A2: number
 ) -> number
 
+
+type ImageDataPrototype<T> = {
+	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
+	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
+	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
+	__len: (self: ImageData<T>) -> number,
+}
+
 type PalettePrototype = {
 	Nearest: ((self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
 		((self: Palette, Color3: Color3) -> (Color3, number)) &
@@ -153,10 +161,10 @@ type PalettePrototype = {
 		((self: Palette, RGBOrRGBA: {number}) -> ()) &
 		((self: Palette, RGBOrRGBA: buffer) -> ()),
 	Peek: (self: Palette, Index: number) -> (number, number, number, number),
+	Iter: (self: Palette) -> () -> (number, number, number, number, number),
 	Sort: (self: Palette) -> (),
-	-- tostring(Palette) returns the first color in the palette as a hex color string
-	-- same with concat but part of the concatonaded string
-	__newindex: (self: Palette, Index: number) -> (number, number, number, number),
+	
+	__iter: (self: Palette) -> () -> (number, number, number, number, number),
 	__len: (self: Palette) -> number,
 }
 
@@ -166,6 +174,13 @@ type Palette = typeof(setmetatable({} :: {
 	Colors: {buffer},
 	Size: number,
 }, {} :: PalettePrototype))
+
+type ImageData<T> = setmetatable({} :: {
+	Pixels: T & ({number} | buffer),
+	Height: number,
+	Width: number,
+	Size: number,
+}, {} :: ImageDataPrototype<T>)
 
 type HilbertCurve = {
 	Visit: (self: HilbertCurve, Direction: number) -> (),
@@ -187,23 +202,6 @@ type DistanceCalcuator = {
     WhitepointB: number,
     WhitepointA: number,
 }
-
-type ImageDataPrototype<T> = {
-	__newindex: (self: ImageData<T>, Index: number) -> (number, number, number, number),
-	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
-	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
-	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
-	__len: (self: ImageData<T>) -> number,
-}
-
-type ImageData<T> = setmetatable({} :: {
-	Pixels: T & ({number} | buffer),
-	Height: number,
-	Width: number,
-	Size: number,
-}, {} :: ImageDataPrototype<T>)
-
-type BufferComparator = (A: buffer, B: buffer) -> boolean
 
 -- sRGB (based on ITU-R Recommendation BT.709)
 -- http://en.wikipedia.org/wiki/SRGB
@@ -478,7 +476,6 @@ local function ImageData_Iter<T>(self: ImageData<T>)
 end
 
 local ImageDataPrototype = {
-	__newindex = ImageData_Peek,
 	__iter = ImageData_Iter,
 	__len = GetClassLength,
 	Iter = ImageData_Iter,
@@ -876,6 +873,22 @@ local function Palette_Add(self: Palette, Value: any, G: number?, B: number?, A:
 	self.Size += 1
 end
 
+local function Palette_Iter(self: Palette)
+	local Length = #self.Colors
+	local Index = 1
+
+	return function()
+		Index = if Index ~= 1 then Index + 4 else Index
+
+		if Index > Length then
+			error("[Quack] Palette iterator tried to go out of bounds")
+		end
+
+		-- Index, R, G, B, A
+		return Index, BufferReadRGBA(self.Colors[Index])
+	end
+end
+
 -- TODO: group very low lum and very high lum colors
 -- TODO: pass custom sort order
 -- TODO: sort criteria function should be placed to HueStats class
@@ -915,12 +928,13 @@ end
 
 local PalettePrototype = {
 	Contains = Palette_Contains,
-	__newindex = Palette_Peek,
 	Nearest = Palette_Nearest,
 	Remove = Palette_Remove,
 	__len = GetClassLength,
-	Peek = Palette_Peek,
+	__iter = Palette_Iter,
+	Iter = Palette_Iter,
 	Sort = Palette_Sort,
+	Peek = Palette_Peek,
 	Add = Palette_Add,
 }
 PalettePrototype.__index = PalettePrototype
