@@ -152,12 +152,11 @@ type PalettePrototype = {
 		((self: Palette, Color3: Color3) -> ()) &
 		((self: Palette, RGBOrRGBA: {number}) -> ()) &
 		((self: Palette, RGBOrRGBA: buffer) -> ()),
+	Peek: (self: Palette, Index: number) -> (number, number, number, number),
 	Sort: (self: Palette) -> (),
-		
 	-- tostring(Palette) returns the first color in the palette as a hex color string
 	-- same with concat but part of the concatonaded string
-	__concat: (self: Palette, String: string) -> string,
-	__tostring: (self: Palette) -> string,
+	__newindex: (self: Palette, Index: number) -> (number, number, number, number),
 	__len: (self: Palette) -> number,
 }
 
@@ -418,6 +417,33 @@ end
 -- Image Data
 --------------------------------------------------------------------------------
 
+local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, number?, number?, number?)
+	if typeof(Index) == "number" then
+		if typeof(self.Pixels) == "table" then
+			if Index < 1 then
+				return nil, nil, nil, nil
+			end
+			local NewIndex = if Index > 1 then Index * 4 else Index
+
+			return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
+				self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
+		else
+			if Index < 0 then
+				return nil, nil, nil, nil
+			end
+			local NewIndex = if Index > 0 then Index * 4 else Index
+
+			if NewIndex > buffer.len(self.Pixels) then
+				return nil, nil, nil, nil
+			else
+				return BufferReadRGBA(self.Pixels, Index)
+			end
+		end
+	else
+		return nil, nil, nil, nil
+	end
+end
+
 local function ImageData_Iter<T>(self: ImageData<T>)
 	if typeof(self.Pixels) == "table" then
 		local Length = #self.Pixels
@@ -451,39 +477,10 @@ local function ImageData_Iter<T>(self: ImageData<T>)
 	end
 end
 
-local function ImageData_Peek<T>(self: ImageData<T>, Index: number): any
-	if typeof(Index) ~= "number" then
-		error("[Quack] Index provided is not of type number")
-	end
-	if Index < 0 then
-		error("[Quack] Index cannot be less than 0")
-	end
-
-	if typeof(Index) == "number" then
-		if typeof(self.Pixels) == "table" then
-			local NewIndex = if Index ~= 1 then Index * 4 else Index
-
-			return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
-				self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
-		else
-			local NewIndex = if Index ~= 0 then Index * 4 else Index
-
-			if NewIndex > buffer.len(self.Pixels) then
-				return nil, nil, nil, nil
-			else
-				return BufferReadRGBA(self.Pixels, Index)
-			end
-		end
-	else
-		return nil, nil, nil, nil
-	end
-end
-
-
 local ImageDataPrototype = {
-	__len = GetClassLength :: any,
 	__newindex = ImageData_Peek,
 	__iter = ImageData_Iter,
+	__len = GetClassLength,
 	Iter = ImageData_Iter,
 	Peek = ImageData_Peek,
 }
@@ -509,7 +506,7 @@ local function CreateImageData(Data: EditableImage | {number} | buffer, Width: n
 
 		if CopyPixels then
 			if typeof(Data) == "buffer" then
-				Pixels = buffer.create(buffer.len(Data))
+				Pixels = buffer.create(Length)
 				buffer.copy(Pixels, 0, Data)
 			else
 				Pixels = table.clone(Data)
@@ -779,7 +776,6 @@ end
 -- Palette
 --------------------------------------------------------------------------------
 
-local HexFormatString = "#%02X%02X%02X"
 local HueGroups = 10
 
 local function GetNearestIndex(
@@ -856,6 +852,16 @@ local function Palette_Contains(self: Palette, Value: any, G: number?, B: number
 	return false
 end
 
+local function Palette_Peek(self: Palette, Index: number): (number?, number?, number?, number?)
+	local ColorBuffer = self.Colors[Index]
+
+	if ColorBuffer then
+		return BufferReadRGBA(ColorBuffer)
+	else
+		return nil, nil, nil, nil
+	end
+end
+
 local function Palette_Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
 	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
 	return FormatRGBA(RGBAType, GetNearestColor(self, NewR, NewG, NewB, NewA))
@@ -865,24 +871,6 @@ local function Palette_Add(self: Palette, Value: any, G: number?, B: number?, A:
 	local NewR, NewG, NewB, NewA = GetRGBA(Value, G, B, A)
 	table.insert(self.Colors, WriteOrCreateColorBuffer(NewR, NewG, NewB, NewA))
 	self.Size += 1
-end
-
-local function Palette_concat(self: Palette, String: string)
-	if not self.Colors or #self.Colors < 1 then 
-		return String
-	else
-		local R, G, B = BufferReadRGBA(self.Colors[1])
-		return `{String}{string.format(HexFormatString, R, G, B)}`
-	end
-end
-
-local function Palette_tostring(self: Palette)
-	if not self.Colors or #self.Colors < 1 then 
-		return "#000000"
-	else
-		local R, G, B = BufferReadRGBA(self.Colors[1])
-		return string.format(HexFormatString, R, G, B)
-	end
 end
 
 -- TODO: group very low lum and very high lum colors
@@ -923,12 +911,12 @@ local function Palette_Sort(self: Palette)
 end
 
 local PalettePrototype = {
-	__len = GetClassLength :: any,
-	__tostring = Palette_tostring,
 	Contains = Palette_Contains,
-	__concat = Palette_concat,
+	__newindex = Palette_Peek,
 	Nearest = Palette_Nearest,
 	Remove = Palette_Remove,
+	__len = GetClassLength,
+	Peek = Palette_Peek,
 	Sort = Palette_Sort,
 	Add = Palette_Add,
 }
