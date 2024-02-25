@@ -836,8 +836,11 @@ local function Palette_Remove(self: Palette, ValueOrIndex: any, G: number?, B: n
 
 	if Index > 0 then
 		self.Uint32Indexs[BufferReadUint32(self.Colors[ValueOrIndex])] = nil
-		table.remove(self.Colors, Index)
-		self.Colors -= 1
+		local ColorBuffer = table.remove(self.Colors, Index)
+
+		if ColorBuffer then
+			self.Colors -= 1
+		end
 	end
 end
 
