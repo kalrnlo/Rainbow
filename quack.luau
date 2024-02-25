@@ -370,10 +370,10 @@ end
 
 local function BufferReadRGBA(Buffer: buffer, Index: number?)
 	local NewIndex = Index or 0
-	buffer.readu8(Buffer, NewIndex)
-	buffer.readu8(Buffer, NewIndex + 1)
-	buffer.readu8(Buffer, NewIndex + 2)
-	buffer.readu8(Buffer, NewIndex + 3)
+	return buffer.readu8(Buffer, NewIndex),
+		buffer.readu8(Buffer, NewIndex + 1),
+		buffer.readu8(Buffer, NewIndex + 2),
+		buffer.readu8(Buffer, NewIndex + 3)
 end
 
 local function BufferReadUint32(Buffer: buffer)
@@ -409,6 +409,7 @@ local function BufferWriteRGBA(
 	buffer.writeu8(Buffer, NewIndex + 1, G)
 	buffer.writeu8(Buffer, NewIndex + 2, B)
 	buffer.writeu8(Buffer, NewIndex + 3, A)
+	return Buffer
 end
 
 --------------------------------------------------------------------------------
