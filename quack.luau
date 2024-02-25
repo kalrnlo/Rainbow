@@ -878,7 +878,7 @@ local function Palette_Iter(self: Palette)
 	local Index = 1
 
 	return function()
-		Index = if Index ~= 1 then Index + 4 else Index
+		Index = if Index ~= 1 then Index + 1 else Index
 
 		if Index > Length then
 			error("[Quack] Palette iterator tried to go out of bounds")
