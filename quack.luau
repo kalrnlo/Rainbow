@@ -16,11 +16,6 @@ for Index, R, G, B, A in Image1 do
 	print(`Pixel({Index}) {R}, {G}, {B}, {A}`)
 end
 
--- class for calcuating color distance
-local DistanceCalculator = Quack.Calcuator("Manhattan", 255, 255, 255, 0)
-DistanceCalculator:CalculateNormalized(230, 240, 255, 0, 255, 255, 255, 1)
-DistanceCalculator:CalculateRaw(230, 240, 255, 0, 255, 255, 255, 1)
-
 local ImageData = Quack.Dither("FloydSteinberg", Palette, {Image, Image2})
 local ImageData = Quack.Dither("FloydSteinberg", Palette, Image)
 
@@ -117,6 +112,10 @@ type DistanceFormulaDefaults = {
 }
 
 type ImageDataPrototype<T> = {
+	Set: ((self: ImageData<T>, Index: number, R: number, G: number, B: number, A: number?) -> ()) &
+		((self: ImageData<T>, Index: number,  Color3: Color3) -> ()) &
+		((self: ImageData<T>, Index: number, RGBOrRGBA: {number}) -> ()) &
+		((self: ImageData<T>, Index: number, RGBOrRGBA: buffer) -> ()),
 	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
 	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
 	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
@@ -149,19 +148,19 @@ type PalettePrototype = {
 	__len: (self: Palette) -> number,
 }
 
-type Palette = typeof(setmetatable({} :: {
-	Calcuator: DistanceCalcuator,
-	Uint32Indexs: {number},
-	Colors: {buffer},
-	Size: number,
-}, {} :: PalettePrototype))
-
 type ImageData<T> = typeof(setmetatable({} :: {
 	Pixels: T & ({number} | buffer),
 	Height: number,
 	Width: number,
 	Size: number,
 }, {} :: ImageDataPrototype<T>))
+
+type Palette = typeof(setmetatable({} :: {
+	Calcuator: DistanceCalcuator,
+	Uint32Indexs: {number},
+	Colors: {buffer},
+	Size: number,
+}, {} :: PalettePrototype))
 
 type CalcuatorFunction = (
     self: DistanceCalcuator,
@@ -397,7 +396,7 @@ local function BufferWriteRGBA(
 	B: number,
 	A: number
 )
-	local NewIndex = if Index ~= 0 then Index * 4 else Index
+	local NewIndex = if Index > 1 then Index * 4 else 0
 	buffer.writeu8(Buffer, NewIndex, R)
 	buffer.writeu8(Buffer, NewIndex + 1, G)
 	buffer.writeu8(Buffer, NewIndex + 2, B)
@@ -410,29 +409,25 @@ end
 --------------------------------------------------------------------------------
 
 local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, number?, number?, number?)
-	if typeof(Index) == "number" then
-		if typeof(self.Pixels) == "table" then
-			if Index < 1 then
-				return nil, nil, nil, nil
-			end
-			local NewIndex = if Index > 1 then Index * 4 else 1
-
-			return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
-				self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
-		else
-			if Index < 0 then
-				return nil, nil, nil, nil
-			end
-			local NewIndex = if Index > 1 then Index * 4 else 0
-
-			if NewIndex > buffer.len(self.Pixels) then
-				return nil, nil, nil, nil
-			else
-				return BufferReadRGBA(self.Pixels, Index)
-			end
+	if typeof(self.Pixels) == "table" then
+		if Index < 1 then
+			return nil, nil, nil, nil
 		end
+		local NewIndex = if Index > 1 then Index * 4 else 1
+
+		return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
+			self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
 	else
-		return nil, nil, nil, nil
+		if Index < 0 then
+			return nil, nil, nil, nil
+		end
+		local NewIndex = if Index > 1 then Index * 4 else 0
+
+		if NewIndex > buffer.len(self.Pixels) then
+			return nil, nil, nil, nil
+		else
+			return BufferReadRGBA(self.Pixels, Index)
+		end
 	end
 end
 
@@ -469,11 +464,43 @@ local function ImageData_Iter<T>(self: ImageData<T>)
 	end
 end
 
+local function ImageData_Set<T>(
+	self: ImageData<T>,
+	Index: number,
+	Value: any,
+	G: number,
+	B: number,
+	A: number?
+)
+	local R, G, B, A = GetRGBA(Value, G, B, A)
+
+	if typeof(self.Pixels) == "table" then
+		if Index < 1 then return end
+		local NewIndex = if Index > 1 then Index * 4 else 1
+
+		self.Pixels[NewIndex] = R
+		self.Pixels[NewIndex + 1] = G
+		self.Pixels[NewIndex + 2] = B
+		self.Pixels[NewIndex + 3] = A or 0
+	else
+		if Index < 0 then return end
+		local NewIndex = if Index > 1 then Index * 4 else 0
+
+		if NewIndex + 4 <= buffer.len(self.Pixels) then
+			buffer.writeu8(self.Pixels, NewIndex, R)
+			buffer.writeu8(self.Pixels, NewIndex + 1, G)
+			buffer.writeu8(self.Pixels, NewIndex + 2, B)
+			buffer.writeu8(self.Pixels, NewIndex + 3, A)
+		end
+	end
+end
+
 local ImageDataPrototype = {
 	__iter = ImageData_Iter,
 	__len = GetClassLength,
 	Iter = ImageData_Iter,
 	Peek = ImageData_Peek,
+	Set = ImageData_Set,
 }
 ImageDataPrototype.__index = ImageDataPrototype
 
@@ -1441,7 +1468,7 @@ local function CreateHueStatistics(GroupAmount: number, MinColors: number)
 		GroupsFull = 0,
 		Stats = Stats,
 	}, HueStatistics)
- end
+end
 
 --------------------------------------------------------------------------------
 -- Histogram
