@@ -6,7 +6,7 @@
 -- A lightweight-ish color quantization library for luau
 -- Based on image-quantization and RgbQuant
 -- @Kalrnlo
--- 18/02/2024
+-- 27/02/2024
 
 --[[
 local Image = Quant.ImageData.new(EditableImage)
@@ -176,9 +176,9 @@ type CalcuatorFunction = (
 ) -> number
 
 type DistanceCalcuator = {
-	calcuate_normalized: CalcuatorFunction,
+	CalcuateNormalized: CalcuatorFunction,
     Defualts: DistanceFormulaDefaults,
-    calculate_raw: CalcuatorFunction,
+    CalculateRaw: CalcuatorFunction,
     WhitepointR: number,
     WhitepointG: number,
     WhitepointB: number,
@@ -846,8 +846,8 @@ local function Palette_Contains(self: Palette, Value: any, G: number?, B: number
 	return false
 end
 
-local function Palette_Peek(self: Palette, Index: number): (number?, number?, number?, number?)
-	local ColorBuffer = self.Colors[Index]
+local function Palette_Peek(self: Palette, Index: number?): (number?, number?, number?, number?)
+	local ColorBuffer = self.Colors[Index or 1]
 
 	if ColorBuffer then
 		return BufferReadRGBA(ColorBuffer)
