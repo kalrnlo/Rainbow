@@ -156,12 +156,12 @@ type Palette = typeof(setmetatable({} :: {
 	Size: number,
 }, {} :: PalettePrototype))
 
-type ImageData<T> = setmetatable({} :: {
+type ImageData<T> = typeof(setmetatable({} :: {
 	Pixels: T & ({number} | buffer),
 	Height: number,
 	Width: number,
 	Size: number,
-}, {} :: ImageDataPrototype<T>)
+}, {} :: ImageDataPrototype<T>))
 
 type CalcuatorFunction = (
     self: DistanceCalcuator,
@@ -1526,6 +1526,10 @@ local DefualtBoxPixels = 2
 	 }
    }
  
+local function GetImportanceSortedColorsUint32()
+	
+end
+
    getImportanceSortedColorsIDXI32() {
 	 // TODO: fix typing issue in stableSort func
 	 const sorted = stableSort(
@@ -1569,17 +1573,25 @@ local DefualtBoxPixels = 2
    }
 
    -- global top-population
-local function ColorStats1D(
-	ImageData: ImageData,
-	Histogram: {number},
-	HueStats: HueStatistics
-)
-const histG = this._histogram;
+local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats: HueStatistics)
+	for _, R, G, B, A in ImageData do
+		local Uint32 = RGBAToUint32(R, G, B, A)
+
+		CheckHueStatistics(HueStatistics, Uint32)
+
+		if Histogram[Uint32] then
+			Histogram[Uint32] += 1
+		else
+			Histogram[Uint32] = 1
+		end
+	end
+
+	--[[
+
+	const histG = this._histogram;
 	 const pointArray = pointContainer.getPointArray();
 	 const len = pointArray.length;
  
-	for _, Color
-
 	 for (let i = 0; i < len; i++) {
 	   const col = pointArray[i].uint32;
  
@@ -1592,6 +1604,21 @@ const histG = this._histogram;
 		 histG[col] = 1;
 	   }
 	 }
+	 --]]
+end
+
+-- population threshold within subregions
+-- FIXME: this can over-reduce (few/no colors same?), need a way to keep
+-- important colors that dont ever reach local thresholds (gradients?)
+local function ColorStats2D(
+	ImageData: ImageData,
+	Histogram: {number},
+	HueStats: HueStatistics,
+	BoxPixels: number,
+	BoxWidth: number,
+	BoxHeight: number
+)
+
 end
 
 -- population threshold within subregions
