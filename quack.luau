@@ -415,7 +415,7 @@ local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, n
 			if Index < 1 then
 				return nil, nil, nil, nil
 			end
-			local NewIndex = if Index > 1 then Index * 4 else Index
+			local NewIndex = if Index > 1 then Index * 4 else 1
 
 			return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
 				self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
@@ -423,7 +423,7 @@ local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, n
 			if Index < 0 then
 				return nil, nil, nil, nil
 			end
-			local NewIndex = if Index > 0 then Index * 4 else Index
+			local NewIndex = if Index > 1 then Index * 4 else o
 
 			if NewIndex > buffer.len(self.Pixels) then
 				return nil, nil, nil, nil
@@ -480,9 +480,9 @@ ImageDataPrototype.__index = ImageDataPrototype
 local function CreateImageData(Data: EditableImage | {number} | buffer, Width: number?, Height: number?, CopyPixels: boolean?)
 	if typeof(Data) == "Instance" then
 		return setmetatable({
-			Pixels = EditableImage:ReadPixels(Vector2.new(), EditableImage.Size),
-			Height = EditableImage.Size.Y,
-			Width = EditableImage.Size.X,
+			Pixels = Data:ReadPixels(Vector2.new(), Data.Size),
+			Height = Data.Size.Y,
+			Width = Data.Size.X,
 		}, ImageDataPrototype)
 	else
 		local Length = if typeof(Data) == "table" then #Data else buffer.len(Data)
