@@ -1527,7 +1527,7 @@ local DefualtBoxPixels = 2
    }
  
 local function GetImportanceSortedColorsUint32()
-	
+
 end
 
    getImportanceSortedColorsIDXI32() {
@@ -1572,7 +1572,7 @@ end
 	 return idxi32.map((v) => +v);
    }
 
-   -- global top-population
+-- global top-population
 local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats: HueStatistics)
 	for _, R, G, B, A in ImageData do
 		local Uint32 = RGBAToUint32(R, G, B, A)
@@ -1585,26 +1585,47 @@ local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats:
 			Histogram[Uint32] = 1
 		end
 	end
+end
 
-	--[[
+-- partitions a rectangle of width x height into an array of boxes stepX x stepY (or less)
+local function MakeBoxes(Width: number, Height: number, StepX: number, StepY: number)
+	local wrem = width % stepX;
+	local hrem = height % stepY;
+	local xend = width - wrem;
+	local yend = height - hrem;
+	local Boxes = table.create(Height * Width)
 
-	const histG = this._histogram;
-	 const pointArray = pointContainer.getPointArray();
-	 const len = pointArray.length;
- 
-	 for (let i = 0; i < len; i++) {
-	   const col = pointArray[i].uint32;
- 
-	   // collect hue stats
-	   this._hueStats.check(col);
- 
-	   if (col in histG) {
-		 histG[col]++;
-	   } else {
-		 histG[col] = 1;
-	   }
-	 }
-	 --]]
+	local BoxHeight = BoundingBox[4]
+	local BoxWidth = BoundingBox[3]
+	for Y = 0, Height, StepY do
+		for X = 0, Width, StepX do
+			local Box = table.create(4)
+			Box[1] = X
+			Box[2] = y
+			Box[3] = if X == xend then wrem else StepX
+			Box[4] = if Y == yend then hrem else StepY
+			Boxes[#Boxes + 1] = Box
+		end
+	end
+	return Boxes
+end
+
+-- iterates @bbox within a parent rect of width @wid; calls @fn, passing index within parent
+local function IterateBox(BoundingBox: {number}, Width: number, Callback: (Index: number) -> ())
+	local BoxHeight = BoundingBox[4]
+	local BoxWidth = BoundingBox[3]
+	local X = BoundingBox[1]
+	local Y = BoundingBox[2]
+
+	local Increment = (Width - BoxWidth) + 1
+	local Index = (Y * Width) + X
+	local Count = 0
+
+	while Index <= (((Y + H) - 1) * Width) + ((X + BoxWidth) - 1) do
+		Callback(Index)
+		Count += 1
+		Index += if Count % BoxWidth == 0 then Increment else 1
+	end
 end
 
 -- population threshold within subregions
@@ -1669,53 +1690,6 @@ local function ColorStats2D(
 	 this._hueStats.injectIntoDictionary(histG);
    }
 end
- 
-   // iterates @bbox within a parent rect of width @wid; calls @fn, passing index within parent
-   private _iterateBox(bbox: Box, wid: number, fn: (i: number) => void) {
-	 const b = bbox;
-	 const i0 = b.y * wid + b.x;
-	 const i1 = (b.y + b.h - 1) * wid + (b.x + b.w - 1);
-	 const incr = wid - b.w + 1;
- 
-	 let cnt = 0;
-	 let i = i0;
- 
-	 do {
-	   fn.call(this, i);
-	   i += ++cnt % b.w === 0 ? incr : 1;
-	 } while (i <= i1);
-   }
- 
-   /**
-	*    partitions a rectangle of width x height into
-	*    array of boxes stepX x stepY (or less)
-	*/
-   private _makeBoxes(
-	 width: number,
-	 height: number,
-	 stepX: number,
-	 stepY: number,
-   ) {
-	 const wrem = width % stepX;
-	 const hrem = height % stepY;
-	 const xend = width - wrem;
-	 const yend = height - hrem;
-	 const boxesArray = [];
- 
-	 for (let y = 0; y < height; y += stepY) {
-	   for (let x = 0; x < width; x += stepX) {
-		 boxesArray.push({
-		   x,
-		   y,
-		   w: x === xend ? wrem : stepX,
-		   h: y === yend ? hrem : stepY,
-		 });
-	   }
-	 }
- 
-	 return boxesArray;
-   }
- }
 
 --------------------------------------------------------------------------------
 -- Quantization
