@@ -1611,17 +1611,18 @@ local function MakeBoxes(Width: number, Height: number, StepX: number, StepY: nu
 end
 
 -- iterates @bbox within a parent rect of width @wid; calls @fn, passing index within parent
-local function IterateBox(BoundingBox: {number}, Width: number, Callback: (Index: number) -> ())
-	local BoxHeight = BoundingBox[4]
-	local BoxWidth = BoundingBox[3]
-	local X = BoundingBox[1]
-	local Y = BoundingBox[2]
+local function IterateBox(Box: {number}, Width: number, Callback: (Index: number) -> ())
+	local BoxHeight = Box[4]
+	local BoxWidth = Box[3]
+	local X = Box[1]
+	local Y = Box[2]
 
+	local Max = (((Y + BoxHeight) - 1) * Width) + ((X + BoxWidth) - 1)
 	local Increment = (Width - BoxWidth) + 1
 	local Index = (Y * Width) + X
 	local Count = 0
 
-	while Index <= (((Y + H) - 1) * Width) + ((X + BoxWidth) - 1) do
+	while Index <= Max do
 		Callback(Index)
 		Count += 1
 		Index += if Count % BoxWidth == 0 then Increment else 1
@@ -1639,7 +1640,19 @@ local function ColorStats2D(
 	BoxWidth: number,
 	BoxHeight: number
 )
+	local Boxes = MakeBoxes(ImageData.Width, ImageData.Height, BoxWidth, BoxHeight)
+	local Area = BoxWidth * BoxHeight
 
+	for _, Box in Boxes do
+		local Height = Box[4]
+		local Width = Box[3]
+		local Effec = math.floor((Width * Height) / Area)
+		local Histogram2 = {} :: {number}
+
+		IterateBox(Box, ImageData.Width, function(Index)
+		
+		end)
+	end
 end
 
 -- population threshold within subregions
