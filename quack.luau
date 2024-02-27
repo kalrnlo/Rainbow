@@ -1895,31 +1895,11 @@ export class RGBQuant extends AbstractPaletteQuantizer {
   }
 }
 
--- A defualt palette thats included for easily doing quantization to make an
--- images colors all become greyscale stuffs
-local GreyscalePalette: Palette = setmetatable({
-	Calculator = table.freeze(CreateCalcuator("EuclideanBT709")),
-	Colors = table.create(2),
-	Uint32Indexs = {},
-	Size = 2,
-}, PalettePrototype) :: any
-
-GreyscalePalette.Colors[1] = WriteOrCreateColorBuffer(0, 0, 0, 255)
-GreyscalePalette.Colors[2] = WriteOrCreateColorBuffer(255, 255, 255, 0)
-table.freeze(GreyscalePalette.Colors)
-table.freeze(GreyscalePalette)
-
 local Exports = table.freeze({
 	ImageData = CreateImageData :: ((Pixels: {number}, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<{number}>) &
 		((Pixels: buffer, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<buffer>) &
 		((EditableImage: EditableImage) -> ImageData<{number}>),
-	Calculator = CreateCalcuator :: ((DistanceFormula: DistanceFormula) -> DistanceCalcuator) &
-			((DistanceFormula: DistanceFormula, R: number, G: number, B: number, A: number) -> DistanceCalcuator),
 	Palette = CreatePalette,
-
-	Palettes = table.freeze({
-		Greyscale = GreyscalePalette,
-	}),
 })
 
 return Exports
