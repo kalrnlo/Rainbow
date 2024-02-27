@@ -378,7 +378,7 @@ local function WriteOrCreateColorBuffer(
 	G: number,
 	B: number,
 	A: number,
-	ColorBuffer: buffer?,
+	ColorBuffer: buffer?
 )
 	local Buffer = ColorBuffer or buffer.create(8)
 	buffer.writeu8(Buffer, 0, R)
@@ -395,7 +395,7 @@ local function BufferWriteRGBA(
 	R: number,
 	G: number,
 	B: number,
-	A: number,
+	A: number
 )
 	local NewIndex = if Index ~= 0 then Index * 4 else Index
 	buffer.writeu8(Buffer, NewIndex, R)
@@ -423,7 +423,7 @@ local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, n
 			if Index < 0 then
 				return nil, nil, nil, nil
 			end
-			local NewIndex = if Index > 1 then Index * 4 else o
+			local NewIndex = if Index > 1 then Index * 4 else 0
 
 			if NewIndex > buffer.len(self.Pixels) then
 				return nil, nil, nil, nil
@@ -774,7 +774,7 @@ local function GetNearestIndex(
 	R: number,
 	G: number,
 	B: number,
-	A: number,
+	A: number
 )
 	local Uint32 = RGBAToUint32(R, G, B, A)
 	local CacheIndex = Palette.Uint32Indexs[Uint32]
@@ -935,13 +935,13 @@ PalettePrototype.__index = PalettePrototype
 
 local function CreatePalette(Options: PaletteInfo): Palette
 	return setmetatable({
-		Colors = if Options.Size then table.create(Options.Size) else {},		
+		Colors = if Options.MaxColors then table.create(Options.MaxColors) else {},		
 		Calculator = CreateCalcuator(
 			Options.DistanceFormula or "ManhattanBT709", 
 			Options.R, Options.G, Options.B, Options.A
 		),
-		Size = Options.Size or 0,
 		Uint32Indexs = {},
+		Size = 0,
 	}, PalettePrototype) :: any
 end
 
@@ -1465,119 +1465,59 @@ local function CreateHueStatistics(GroupAmount: number, MinColors: number)
 local DefualtBoxSizeX = 64
 local DefualtBoxSizeY = 64
 local DefualtBoxPixels = 2
+ 
+local function GetImportanceSortedColorsUint32(
+	Histogram: {number},
+	HueStats: HueStatistics,
+	InitColors: number
+)
+-- TODO: fix typing issue in stableSort func
+const sorted = stableSort(
+  Object.keys(this._histogram),
+  (a, b) => this._histogram[b] - this._histogram[a],
+);
+if (sorted.length === 0) {
+  return [];
+}
 
- import { HueStatistics } from '../../utils/hueStatistics';
- import { PointContainer } from '../../utils/pointContainer';
- import { stableSort } from '../../utils/arithmetic';
+let idxi32;
+switch (this._method) {
+  case 1:
+	const initialColorsLimit = Math.min(sorted.length, this._initColors);
+	const last = sorted[initialColorsLimit - 1];
+	const freq = this._histogram[last];
 
- interface Box {
-   x: number;
-   y: number;
-   h: number;
-   w: number;
- }
- 
- export class ColorHistogram {
-   private static _boxSize = [64, 64];
-   private static _boxPixels = 2;
-   private static _hueGroups = 10;
- 
-   // 1 = by global population, 2 = subregion population threshold
-   private _method: number;
- 
-   // HueStatistics instance
-   private _hueStats: HueStatistics;
- 
-   private _histogram: { [color: string]: number };
- 
-   // # of highest-frequency colors to start with for palette reduction
-   private _initColors: number;
- 
-   // if > 0, enables hues stats and min-color retention per group
-   private _minHueCols: number;
- 
-   constructor(method: number, colors: number) {
-	 -- 1 = by global population, 2 = subregion population threshold
-	 this._method = method;
- 
-	 -- if > 0, enables hues stats and min-color retention per group
-	 this._minHueCols = colors << 2; -- opts.minHueCols || 0;
- 
-	 -- # of highest-frequency colors to start with for palette reduction
-	 this._initColors = colors << 2;
- 
-	 -- HueStatistics instance
-	 this._hueStats = new HueStatistics(
-	   ColorHistogram._hueGroups,
-	   this._minHueCols,
-	 );
- 
-	 this._histogram = Object.create(null);
-   }
- 
-   sample(pointContainer: PointContainer) {
-	 switch (this._method) {
-	   case 1:
-		 this._colorStats1D(pointContainer);
-		 break;
-	   case 2:
-		 this._colorStats2D(pointContainer);
-		 break;
-	 }
-   }
- 
-local function GetImportanceSortedColorsUint32()
+	idxi32 = sorted.slice(0, initialColorsLimit);
 
+	-- add any cut off colors with same freq as last
+	let pos = initialColorsLimit;
+	const len = sorted.length;
+	while (pos < len && this._histogram[sorted[pos]] === freq) {
+	  idxi32.push(sorted[pos++]);
+	}
+
+	// inject min huegroup colors
+	this._hueStats.injectIntoArray(idxi32);
+	break;
+
+  case 2:
+	idxi32 = sorted;
+	break;
+
+  default:
+	throw new Error('Incorrect method');
+}
+
+-- int32-ify values
+return idxi32.map((v) => +v);
 end
-
-   getImportanceSortedColorsIDXI32() {
-	 // TODO: fix typing issue in stableSort func
-	 const sorted = stableSort(
-	   Object.keys(this._histogram),
-	   (a, b) => this._histogram[b] - this._histogram[a],
-	 );
-	 if (sorted.length === 0) {
-	   return [];
-	 }
- 
-	 let idxi32;
-	 switch (this._method) {
-	   case 1:
-		 const initialColorsLimit = Math.min(sorted.length, this._initColors);
-		 const last = sorted[initialColorsLimit - 1];
-		 const freq = this._histogram[last];
- 
-		 idxi32 = sorted.slice(0, initialColorsLimit);
- 
-		 -- add any cut off colors with same freq as last
-		 let pos = initialColorsLimit;
-		 const len = sorted.length;
-		 while (pos < len && this._histogram[sorted[pos]] === freq) {
-		   idxi32.push(sorted[pos++]);
-		 }
- 
-		 // inject min huegroup colors
-		 this._hueStats.injectIntoArray(idxi32);
-		 break;
- 
-	   case 2:
-		 idxi32 = sorted;
-		 break;
- 
-	   default:
-		 throw new Error('Incorrect method');
-	 }
- 
-	 -- int32-ify values
-	 return idxi32.map((v) => +v);
-   }
 
 -- global top-population
 local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats: HueStatistics)
 	for _, R, G, B, A in ImageData do
 		local Uint32 = RGBAToUint32(R, G, B, A)
 
-		CheckHueStatistics(HueStatistics, Uint32)
+		CheckHueStatistics(HueStats, Uint32)
 
 		if Histogram[Uint32] then
 			Histogram[Uint32] += 1
@@ -1610,25 +1550,6 @@ local function MakeBoxes(Width: number, Height: number, StepX: number, StepY: nu
 	return Boxes
 end
 
--- iterates @bbox within a parent rect of width @wid; calls @fn, passing index within parent
-local function IterateBox(Box: {number}, Width: number, Callback: (Index: number) -> ())
-	local BoxHeight = Box[4]
-	local BoxWidth = Box[3]
-	local X = Box[1]
-	local Y = Box[2]
-
-	local Max = (((Y + BoxHeight) - 1) * Width) + ((X + BoxWidth) - 1)
-	local Increment = (Width - BoxWidth) + 1
-	local Index = (Y * Width) + X
-	local Count = 0
-
-	while Index <= Max do
-		Callback(Index)
-		Count += 1
-		Index += if Count % BoxWidth == 0 then Increment else 1
-	end
-end
-
 -- population threshold within subregions
 -- FIXME: this can over-reduce (few/no colors same?), need a way to keep
 -- important colors that dont ever reach local thresholds (gradients?)
@@ -1646,62 +1567,69 @@ local function ColorStats2D(
 	for _, Box in Boxes do
 		local Height = Box[4]
 		local Width = Box[3]
-		local Effec = math.floor((Width * Height) / Area)
+		local PreEffc = math.floor((Width * Height) / Area) * BoxPixels
+		local Effc = if PreEffc < 2 then 2 else PreEffc
 		local Histogram2 = {} :: {number}
+		local X = Box[1]
+		local Y = Box[2]
+	
+		-- iterates @bbox within a parent rect of width @wid; calls @fn, passing index within parent
+		local Max = (((Y + Height) - 1) * ImageData.Width) + ((X + Width) - 1)
+		local Increment = (ImageData.Width - Width) + 1
+		local Index = (Y * Width) + X
+		local Count = 0
+	
+		while Index <= Max do
+			local Uint32 = RGBAToUint32(ImageData:Peek(Index))
 
-		IterateBox(Box, ImageData.Width, function(Index)
-		
-		end)
+			-- collect hue stats
+			CheckHueStatistics(HueStats)
+
+			if Histogram[Uint32] then
+				Histogram[Uint32] += 1
+			elseif Histogram2[Uint32] then
+				Histogram2[Uint32] += 1
+				local Value = Histogram2[Uint32]
+
+				if Value >= Effc then
+					Histogram[Uint32] = Value
+				end
+			else
+				Histogram2[Uint32] = 1
+			end
+
+			Count += 1
+			Index += if Count % BoxWidth == 0 then Increment else 1
+		end
+	end
+
+	-- inject min huegroup colors
+	for Index, Stat in HueStats do
+		if Stat.Amount <= HueStats.MinColors then
+			for _, ColorUint32 in Stat.Colors do
+				if not Histogram[ColorUint32] then
+					Histogram[ColorUint32] = 1
+				else
+					Histogram[ColorUint32] += 1
+				end
+			end
+		end
 	end
 end
 
--- population threshold within subregions
--- FIXME: this can over-reduce (few/no colors same?), need a way to keep
--- important colors that dont ever reach local thresholds (gradients?)
-local function ColorStats2D(
-	ImageData: ImageData,
-	Histogram: {number},
-	HueStats: HueStatistics,
-	BoxPixels: number,
-	BoxWidth: number,
-	BoxHeight: number
-) 
-	 const width = pointContainer.getWidth();
-	 const height = pointContainer.getHeight();
-	 const pointArray = pointContainer.getPointArray();
- 
-	 const boxW = ColorHistogram._boxSize[0];
-	 const boxH = ColorHistogram._boxSize[1];
-	 const area = boxW * boxH;
-	 const boxes = this._makeBoxes(width, height, boxW, boxH);
-	 const histG = this._histogram;
- 
-	 boxes.forEach((box) => {
-	   let effc = Math.round((box.w * box.h) / area) * ColorHistogram._boxPixels;
-	   if (effc < 2) effc = 2;
- 
-	   const histL: Record<string, number> = {};
-	   this._iterateBox(box, width, (i) => {
-		 const col = pointArray[i].uint32;
- 
-		 -- collect hue stats
-		 this._hueStats.check(col);
- 
-		 if (col in histG) {
-		   histG[col]++;
-		 } else if (col in histL) {
-		   if (++histL[col] >= effc) {
-			 histG[col] = histL[col];
-		   }
-		 } else {
-		   histL[col] = 1;
-		 }
-	   });
-	 });
- 
-	 // inject min huegroup colors
-	 this._hueStats.injectIntoDictionary(histG);
-   }
+-- global top-population
+local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats: HueStatistics)
+	for _, R, G, B, A in ImageData do
+		local Uint32 = RGBAToUint32(R, G, B, A)
+
+		CheckHueStatistics(HueStats, Uint32)
+
+		if Histogram[Uint32] then
+			Histogram[Uint32] += 1
+		else
+			Histogram[Uint32] = 1
+		end
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -1814,7 +1742,7 @@ export class RGBQuant extends AbstractPaletteQuantizer {
     this._histogram.sample(image);
   }
 
-  // reduces histogram to palette, remaps & memoizes reduced colors
+  -- reduces histogram to palette, remaps & memoizes reduced colors
   *quantize() {
     const idxi32 = this._histogram.getImportanceSortedColorsIDXI32();
     if (idxi32.length === 0) {
@@ -1824,12 +1752,12 @@ export class RGBQuant extends AbstractPaletteQuantizer {
     yield* this._buildPalette(idxi32);
   }
 
-  // reduces similar colors from an importance-sorted Uint32 rgba array
+  -- reduces similar colors from an importance-sorted Uint32 rgba array
   private *_buildPalette(
     idxi32: number[],
   ): IterableIterator<PaletteQuantizerYieldValue> {
-    // reduce histogram to create initial palette
-    // build full rgb palette
+    -- reduce histogram to create initial palette
+    -- build full rgb palette
     const palette = new Palette();
     const colorArray = palette.getPointContainer().getPointArray();
     const usageArray = new Array(idxi32.length);
@@ -1845,43 +1773,43 @@ export class RGBQuant extends AbstractPaletteQuantizer {
     let palLen = len;
     let thold = this._initialDistance;
 
-    // palette already at or below desired length
+    -- palette already at or below desired length
     while (palLen > this._colors) {
       memDist.length = 0;
 
-      // iterate palette
+      -- iterate palette
       for (let i = 0; i < len; i++) {
         if (usageArray[i] === 0) continue;
         const pxi = colorArray[i];
-        // if (!pxi) continue;
+        -- if (!pxi) continue;
 
         for (let j = i + 1; j < len; j++) {
           if (usageArray[j] === 0) continue;
           const pxj = colorArray[j];
-          // if (!pxj) continue;
+          -- if (!pxj) continue;
 
           const dist = this._distance.calculateNormalized(pxi, pxj);
           if (dist < thold) {
-            // store index,rgb,dist
+            -- store index,rgb,dist
             memDist.push(new RemovedColor(j, pxj, dist));
             usageArray[j] = 0;
             palLen--;
           }
         }
       }
-      // palette reduction pass
-      // console.log("palette length: " + palLen);
+	-- palette reduction pass
+      -- console.log("palette length: " + palLen);
 
-      // if palette is still much larger than target, increment by larger initDist
+      -- if palette is still much larger than target, increment by larger initDist
       thold +=
         palLen > this._colors * 3
           ? this._initialDistance
           : this._distanceIncrement;
     }
 
-    // if palette is over-reduced, re-add removed colors with largest distances from last round
+    -- if palette is over-reduced, re-add removed colors with largest distances from last round
     if (palLen < this._colors) {
-      // sort descending
+      -- sort descending
       stableSort(memDist, (a, b) => b.distance - a.distance);
 
       let k = 0;
