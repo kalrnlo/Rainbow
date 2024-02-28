@@ -1443,7 +1443,7 @@ local function CheckHueStatistics(HueStatistics: HueStatistics, Uint32: number)
 	if GR.Amount <= HueStatistics.MinColors then
 		table.insert(GR.Colors, Uint32)
 	end
-end
+end	
 
 local HueStatistics = {
 	InjectIntoDictionary = HueStatistics_InjectIntoDictionary,
@@ -1626,7 +1626,7 @@ local function ColorStats2D(
 			end
 
 			Count += 1
-			Index += if Count % BoxWidth == 0 then Increment else 1
+			Index += if Count % Width == 0 then Increment else 1
 		end
 	end
 
