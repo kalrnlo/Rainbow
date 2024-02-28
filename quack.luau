@@ -196,6 +196,7 @@ type HilbertCurve = {
 }
 
 local 32BitConversionHex = 0xFFFFFFFF
+local Uint32Hex = 0xFF
 -- sRGB (based on ITU-R Recommendation BT.709)
 -- http://en.wikipedia.org/wiki/SRGB
 local BT709 = {
@@ -238,6 +239,13 @@ local function RGBAToUint32(R: number, G: number, B: number, A: number)
 	return bit32.rshift(
 		bit32.bor(bit32.lshift(A, 24), bit32.lshift(B, 16), bit32.lshift(G, 8), R), 0
 	)
+end
+
+local function Uint32ToRGBA(Uint32: number)
+	return bit32.band(Uint32, Uint32Hex), 
+		bit32.band(bit32.rshift(Uint32, 8), Uint32Hex),
+		bit32.band(bit32.rshift(Uint32, 16), Uint32Hex), 
+		bit32.band(bit32.rshift(Uint32, 24), Uint32Hex)
 end
 
 local function RGBToHSL(R: number, G: number, B: number)
@@ -1581,7 +1589,7 @@ local function ColorStats2D(
 			local Uint32 = RGBAToUint32(ImageData:Peek(Index))
 
 			-- collect hue stats
-			CheckHueStatistics(HueStats)
+			CheckHueStatistics(HueStats, Uint32)
 
 			if Histogram[Uint32] then
 				Histogram[Uint32] += 1
@@ -1654,7 +1662,7 @@ local function Quantize(
 	-- # of highest-frequency colors to start with for palette reduction
 	local InitalColors = bit32.lshift(MaxColors, 2)
 	-- if > 0, enables hues stats and min-color retention per group
-	local MinHueColors = bit32.lshift(MaxColors, 2)
+	local MinHueColors = InitalColors
 	-- accumulated histogram
 	local Histogram = {} :: {number}
 
@@ -1702,59 +1710,71 @@ local function Quantize(
 	local Colors = {} :: {buffer}
 
 	for Index, Uint32 in Uint32Indexs do
-		Colors.push(Point.createByUint32(idxi32[i]));
+		table.insert(Colors, WriteOrCreateColorBuffer(Uint32ToRGBA(Uint32)))
 	end
 
-  
-	  const len = colorArray.length;
-	  const memDist = [];
-  
-	  let palLen = len;
-	  let thold = this._initialDistance;
-  
-	  -- palette already at or below desired length
-	  while (palLen > this._colors) {
-		memDist.length = 0;
-  
+	local THold = InitalDistance
+	local PaletteLength = #Colors
+	local MemDist = {}
+
+	while PaletteLength > MaxColors do
+		table.clear(MemDist)
+
 		-- iterate palette
-		for (let i = 0; i < len; i++) {
-		  if (usageArray[i] === 0) continue;
-		  const pxi = colorArray[i];
-		  -- if (!pxi) continue;
-  
-		  for (let j = i + 1; j < len; j++) {
-			if (usageArray[j] === 0) continue;
-			const pxj = colorArray[j];
-			-- if (!pxj) continue;
-  
-			const dist = this._distance.calculateNormalized(pxi, pxj);
-			if (dist < thold) {
-			  -- store index,rgb,dist
-			  memDist.push(new RemovedColor(j, pxj, dist));
-			  usageArray[j] = 0;
-			  palLen--;
-			}
-		  }
-		}
-	  -- palette reduction pass
+		for Index, IsUsed in UsageArray do
+			if IsUsed == false then continue end
+			local Buffer = Colors[Index]
+
+			for Index2 = Index + 1, #UsageArray do
+				local IsUsed2 = UsageArray[Index2]
+				if IsUsed2 == false then continue end
+				local Buffer2 = Colors[Index2]
+
+				local Distance = Calculator:CalcuateNormalized(
+					BufferReadRGBA(Buffer),
+					BufferReadRGBA(Buffer2)
+				)
+
+				if Distance < THold then
+					local RemovedColor = table.create(3)
+					RemovedColor[1] = Index2
+					RemovedColor[2] = Buffer2
+					RemovedColor[3] = Distance
+
+					MemDist[#MemDist + 1] = RemovedColor
+					UsageArray[Index2] = false
+					PaletteLength -= 1
+				end
+			end
+		end
+		-- palette reduction pass
 		-- console.log("palette length: " + palLen);
   
 		-- if palette is still much larger than target, increment by larger initDist
-		thold +=
-		  palLen > this._colors * 3
-			? this._initialDistance
-			: this._distanceIncrement;
-	  }
+		THold += if PaletteLength > MaxColors * 3 then InitalDistance else DistanceIncrement
+	end
   
-	  -- if palette is over-reduced, re-add removed colors with largest distances from last round
-	  if (palLen < this._colors) {
+	-- if palette is over-reduced, re-add removed colors with largest distances from last round
+	if PaletteLength < MaxColors then
+		-- sort descending
+		table.sort(MemDist, function(A, B)
+			return (B[3] - A[3]) > 0
+		end)
+
+		for _, RemovedColor in MemDist do
+			if PaletteLength > MaxColors then break end
+		end
+	end
+
+	-- if palette is over-reduced, re-add removed colors with largest distances from last round
+	if (palLen < this._colors) {
 		-- sort descending
 		stableSort(memDist, (a, b) => b.distance - a.distance);
   
 		let k = 0;
 		while (palLen < this._colors && k < memDist.length) {
 		  const removedColor = memDist[k];
-		  // re-inject rgb into final palette
+		  -- re-inject rgb into final palette
 		  usageArray[removedColor.index] = 1;
 		  palLen++;
 		  k++;
