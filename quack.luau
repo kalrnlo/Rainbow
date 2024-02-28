@@ -1765,7 +1765,7 @@ local function Quantize(
 			PaletteLength += 1
 		end
 	end
-  
+
 	local ColorLength = #Colors
 	--let colors = colorArray.length;
 	for Index = #Colors, #Colors, -1 do
@@ -1793,12 +1793,12 @@ local function Quantize(
 	local NewColors = table.create(ColorLength)
 	table.move(Colors, 1, ColorLength, 1, NewColors)
 
-	local Palette = setmetatable({
+	local Palette: Palette = setmetatable({
 		Calculator = Calculator,
 		Colors = NewColors,
 		Size = ColorLength,
 		Uint32Indexs = {},
-	}, PalettePrototype)
+	}, PalettePrototype) :: any
 
 	Palette:Sort()
 	return Palette
