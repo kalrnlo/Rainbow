@@ -1666,10 +1666,7 @@ local function Quantize(
 	-- accumulated histogram
 	local Histogram = {} :: {number}
 
-	local HueStats = CreateHueStatistics(
-		HueGroups,
-		MinHueColors
-	)
+	local HueStats = CreateHueStatistics(HueGroups, MinHueColors)
 
 	-- gathers histogram info
 	if IsGlobalPopulation then
@@ -1713,8 +1710,8 @@ local function Quantize(
 		table.insert(Colors, WriteOrCreateColorBuffer(Uint32ToRGBA(Uint32)))
 	end
 
-	local THold = InitalDistance
 	local PaletteLength = #Colors
+	local THold = InitalDistance
 	local MemDist = {}
 
 	while PaletteLength > MaxColors do
@@ -1763,41 +1760,48 @@ local function Quantize(
 
 		for _, RemovedColor in MemDist do
 			if PaletteLength > MaxColors then break end
+			-- re-inject rgb into final palette
+			Usage[RemovedColor[1]] = true
+			PaletteLength += 1
+		end
+	end
+  
+	local ColorLength = #Colors
+	--let colors = colorArray.length;
+	for Index = #Colors, #Colors, -1 do
+		if Usage[Index] == false then
+			if Index ~= ColorLength then
+				Colors[Index] = Colors[ColorLength]
+			end
+
+			ColorLength -= 1
 		end
 	end
 
-	-- if palette is over-reduced, re-add removed colors with largest distances from last round
-	if (palLen < this._colors) {
-		-- sort descending
-		stableSort(memDist, (a, b) => b.distance - a.distance);
-  
-		let k = 0;
-		while (palLen < this._colors && k < memDist.length) {
-		  const removedColor = memDist[k];
-		  -- re-inject rgb into final palette
-		  usageArray[removedColor.index] = 1;
-		  palLen++;
-		  k++;
-		}
-	  }
-  
-	  let colors = colorArray.length;
-	for Index = #Colors, #Colors, -1 do
-
-	end
-
+	--[[
 	  for (let colorIndex = colors - 1; colorIndex >= 0; colorIndex--) {
 		if (usageArray[colorIndex] === 0) {
 		  if (colorIndex !== colors - 1) {
 			colorArray[colorIndex] = colorArray[colors - 1];
 		  }
+
 		  --colors;
 		}
 	  }
 	  colorArray.length = colors;
-  
-	  palette.sort();
-	  return Palette
+	--]]
+	local NewColors = table.create(ColorLength)
+	table.move(Colors, 1, ColorLength, 1, NewColors)
+
+	local Palette = setmetatable({
+		Calculator = Calculator,
+		Colors = NewColors,
+		Size = ColorLength,
+		Uint32Indexs = {},
+	}, PalettePrototype)
+
+	Palette:Sort()
+	return Palette
 end
 
 local Exports = table.freeze({
