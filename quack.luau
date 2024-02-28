@@ -195,7 +195,7 @@ type HilbertCurve = {
 	Y: number,
 }
 
-local 32BitConversionHex = 0xFFFFFFFF
+local BitConversionHex = 0xFFFFFFFF
 local Uint32Hex = 0xFF
 -- sRGB (based on ITU-R Recommendation BT.709)
 -- http://en.wikipedia.org/wiki/SRGB
@@ -370,7 +370,7 @@ local function GetClassLength<T>(self: T & {Size: number})
 end
 
 local function To32Bit(N: number)
-	return bit32.band(N, 32BitConversionHex)
+	return bit32.band(N, BitConversionHex)
 end
 
 --------------------------------------------------------------------------------
