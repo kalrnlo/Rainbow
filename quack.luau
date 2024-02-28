@@ -195,6 +195,7 @@ type HilbertCurve = {
 	Y: number,
 }
 
+local 32BitConversionHex = 0xFFFFFFFF
 -- sRGB (based on ITU-R Recommendation BT.709)
 -- http://en.wikipedia.org/wiki/SRGB
 local BT709 = {
@@ -354,6 +355,10 @@ end
 
 local function GetClassLength<T>(self: T & {Size: number})
 	return self.Size
+end
+
+local function To32Bit(N: number)
+	return bit32.band(N, 32BitConversionHex)
 end
 
 --------------------------------------------------------------------------------
@@ -1496,47 +1501,57 @@ local DefualtBoxPixels = 2
 local function GetImportanceSortedColorsUint32(
 	Histogram: {number},
 	HueStats: HueStatistics,
-	InitColors: number
+	InitColors: number,
+	Method: Method,
 )
--- TODO: fix typing issue in stableSort func
-const sorted = stableSort(
-  Object.keys(this._histogram),
-  (a, b) => this._histogram[b] - this._histogram[a],
-);
-if (sorted.length === 0) {
-  return [];
-}
+	local Keys = {}
 
-let idxi32;
-switch (this._method) {
-  case 1:
-	const initialColorsLimit = Math.min(sorted.length, this._initColors);
-	const last = sorted[initialColorsLimit - 1];
-	const freq = this._histogram[last];
+	for Key in Histogram do
+		table.insert(Keys, Key)
+	end
+	if #Keys == 0 then return {} end
 
-	idxi32 = sorted.slice(0, initialColorsLimit);
+	table.sort(Keys, function(A, B)
+		return (Histogram[B] - Histogram[A]) > 0
+	end)
 
-	-- add any cut off colors with same freq as last
-	let pos = initialColorsLimit;
-	const len = sorted.length;
-	while (pos < len && this._histogram[sorted[pos]] === freq) {
-	  idxi32.push(sorted[pos++]);
-	}
+	local IsGlobalPopulation = Method == "GlobalPopulation"
+	local Uint32Indexs = if IsGlobalPopulation then table.clone(Keys) else Keys
 
-	// inject min huegroup colors
-	this._hueStats.injectIntoArray(idxi32);
-	break;
+	if IsGlobalPopulation then
+		local InitialColorsLimit = math.min(#Keys, InitColors)
+		-- this is just so that its an actual index, as js arrays start at 0
+		-- and #keys == arrat.length in js, so without subtracting 1 it wouldnt
+		-- be an actual index within the array
+		-- const last = Keys[initialColorsLimit - 1]
+		local Freq = Histogram[Keys[InitialColorsLimit]]
+	
+		-- add any cut off colors with same freq as last
+		local Position = InitialColorsLimit
+		let pos = initialColorsLimit;
+		const len = sorted.length;
 
-  case 2:
-	idxi32 = sorted;
-	break;
+		while Position < #Keys and Histogram[Sorted[Position]] == Freq do
+			Position += 1
+			table.insert(Uint32Indexs, Keys[Position])
+		end
+	
+		-- inject min huegroup colors
+		for Index, Stat in HueStats.Stats do
+			if Stat.Amount <= HueStats.MinColors then
+				for _, ColorUint32 in Stat.Colors do
+					if not table.find(Uint32Indexs, ColorUint32) then
+						table.insert(Uint32Indexs, ColorUint32)
+					end
+				end
+			end
+		end
+	end
 
-  default:
-	throw new Error('Incorrect method');
-}
-
--- int32-ify values
-return idxi32.map((v) => +v);
+	for Index, Value in Uint32Indexs do
+		Uint32Indexs[Index] = To32Bit(Value)
+	end
+	return Uint32Indexs
 end
 
 -- global top-population
