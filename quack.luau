@@ -1628,7 +1628,7 @@ local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats:
 	for _, R, G, B, A in ImageData do
 		local Uint32 = RGBAToUint32(R, G, B, A)
 
-		CheckHueStatistics(HueStats, Uint32)
+		CheckHueStatistics(HueStats, Uint32)Up
 
 		if Histogram[Uint32] then
 			Histogram[Uint32] += 1
