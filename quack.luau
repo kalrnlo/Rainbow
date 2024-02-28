@@ -1721,12 +1721,12 @@ local function Quantize(
 		table.clear(MemDist)
 
 		-- iterate palette
-		for Index, IsUsed in UsageArray do
+		for Index, IsUsed in Usage do
 			if IsUsed == false then continue end
 			local Buffer = Colors[Index]
 
-			for Index2 = Index + 1, #UsageArray do
-				local IsUsed2 = UsageArray[Index2]
+			for Index2 = Index + 1, #Usage do
+				local IsUsed2 = Usage[Index2]
 				if IsUsed2 == false then continue end
 				local Buffer2 = Colors[Index2]
 
@@ -1742,7 +1742,7 @@ local function Quantize(
 					RemovedColor[3] = Distance
 
 					MemDist[#MemDist + 1] = RemovedColor
-					UsageArray[Index2] = false
+					Usage[Index2] = false
 					PaletteLength -= 1
 				end
 			end
