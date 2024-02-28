@@ -1642,7 +1642,7 @@ local function Quantize(
 	ImageOrImages: ImageData | {ImageData},
 	Calculator: DistanceCalcuator,
 	Method: Method,
-	Colors: number,
+	MaxColors: number,
 	DistanceIncrement: number?,
 	InitalDistance: number?,
 )
@@ -1652,9 +1652,9 @@ local function Quantize(
 	local InitalDistance = InitalDistance or DefualtInitalDistance
 	local IsGlobalPopulation = Method == "GlobalPopulation"
 	-- # of highest-frequency colors to start with for palette reduction
-	local InitalColors = bit32.lshift(Colors, 2)
+	local InitalColors = bit32.lshift(MaxColors, 2)
 	-- if > 0, enables hues stats and min-color retention per group
-	local MinHueColors = bit32.lshift(Colors, 2)
+	local MinHueColors = bit32.lshift(MaxColors, 2)
 	-- accumulated histogram
 	local Histogram = {} :: {number}
 
@@ -1690,34 +1690,21 @@ local function Quantize(
 		end
 	end
   
+	-- reduces histogram to palette, remaps & memoizes reduced colors
 	local Uint32Indexs = GetImportanceSortedColorsUint32(
 		Histogram, HueStats, InitalColors, IsGlobalPopulation
 	)
   
-	-- reduces histogram to palette, remaps & memoizes reduced colors
-	*quantize() {
-	  const idxi32 = this._histogram.getImportanceSortedColorsIDXI32();
-	  if (idxi32.length === 0) {
-		throw new Error('No colors in image');
-	  }
-  
-	  yield* this._buildPalette(idxi32);
-	}
-  
 	-- reduces similar colors from an importance-sorted Uint32 rgba array
-	private *_buildPalette(
-	  idxi32: number[],
-	): IterableIterator<PaletteQuantizerYieldValue> {
-	  -- reduce histogram to create initial palette
-	  -- build full rgb palette
-	  const palette = new Palette();
-	  const colorArray = palette.getPointContainer().getPointArray();
-	  const usageArray = new Array(idxi32.length);
-  
-	  for (let i = 0; i < idxi32.length; i++) {
-		colorArray.push(Point.createByUint32(idxi32[i]));
-		usageArray[i] = 1;
-	  }
+	-- reduce histogram to create initial palette
+	-- build full rgb palette
+	local Usage = table.create(#Uint32Indexs, true) :: {boolean}
+	local Colors = {} :: {buffer}
+
+	for Index, Uint32 in Uint32Indexs do
+		Colors.push(Point.createByUint32(idxi32[i]));
+	end
+
   
 	  const len = colorArray.length;
 	  const memDist = [];
@@ -1775,6 +1762,10 @@ local function Quantize(
 	  }
   
 	  let colors = colorArray.length;
+	for Index = #Colors, #Colors, -1 do
+
+	end
+
 	  for (let colorIndex = colors - 1; colorIndex >= 0; colorIndex--) {
 		if (usageArray[colorIndex] === 0) {
 		  if (colorIndex !== colors - 1) {
@@ -1786,7 +1777,7 @@ local function Quantize(
 	  colorArray.length = colors;
   
 	  palette.sort();
-
+	  return Palette
 end
 
  /*
