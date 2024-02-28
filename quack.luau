@@ -1198,8 +1198,8 @@ local function Dither_ErrorDiffusionArray(
 				EA = OriginalA - PaletteA
 			end
 
-			local DStart = if Dir == 1 then 0 else #Kernels - 1
-			local DEnd = if Dir == 1 then #Kernels else -1
+			local DStart = if Dir == 1 then 0 else #Kernels
+			local DEnd = if Dir == 1 then #Kernels else 0
 
 			for Index2 = DStart, DEnd, Dir do
 				local X1 = Kernels[Index2][2] * Dir
@@ -1392,33 +1392,6 @@ end
  * hueStatistics.ts - part of Image Quantization Library
 --]]
 
--- bad attempt at making it clear its a dictionary using {[number]: number}, but eh
-local function HueStatistics_InjectIntoDictionary(self: HueStatistics, Histogram: {[number]: number})
-	for Index, Stat in self.Stats do
-		if Stat.Amount <= self.MinColors then
-			for _, ColorUint32 in Stat.Colors do
-				if not Histogram[ColorUint32] then
-					Histogram[ColorUint32] = 1
-				else
-					Histogram[ColorUint32] += 1
-				end
-			end
-		end
-	end
-end
-
-local function HueStatistics_InjectIntoArray(self: HueStatistics, Histogram: {number})
-	for Index, Stat in self.Stats do
-		if Stat.Amount <= self.MinColors then
-			for _, ColorUint32 in Stat.Colors do
-				if not table.find(Histogram, Color) then
-					table.insert(Histogram, Color)
-				end
-			end
-		end
-	end
-end
-
 local function CheckHueStatistics(HueStatistics: HueStatistics, Uint32: number)
 	--[[
 		if (this._groupsFull === this._numGroups + 1) {
@@ -1431,7 +1404,7 @@ local function CheckHueStatistics(HueStatistics: HueStatistics, Uint32: number)
 	local G = bit32.band(bit32.rshift(Uint32, 8), 0xff)
 	local B = bit32.band(bit32.rshift(Uint32, 16), 0xff)
 	local H = RGBToHSL(R, G, B)
-	local HG = if R == G and G == b then
+	local HG = if R == G and G == B then
 			0
 		else
 			1 + HueGroup(H, HueStatistics.GroupAmount)
@@ -1450,13 +1423,6 @@ local function CheckHueStatistics(HueStatistics: HueStatistics, Uint32: number)
 	end
 end	
 
-local HueStatistics = {
-	InjectIntoDictionary = HueStatistics_InjectIntoDictionary,
-	InjectIntoArray = HueStatistics_InjectIntoArray,
-	Check = CheckHueStatistics,
-}
-HueStatistics.__index = HueStatistics
-
 local function CreateHueStatistics(GroupAmount: number, MinColors: number)
 	local Stats = table.create(GroupAmount) :: {HueGroup}
 
@@ -1467,12 +1433,12 @@ local function CreateHueStatistics(GroupAmount: number, MinColors: number)
 		}
 	end
 
-	return setmetatable({
+	return {
 		GroupAmount = GroupAmount,
 		MinColors = MinColors,
 		GroupsFull = 0,
 		Stats = Stats,
-	}, HueStatistics)
+	}
 end
 
 --------------------------------------------------------------------------------
