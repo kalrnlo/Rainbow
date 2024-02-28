@@ -353,6 +353,10 @@ local function GetRGBA(
 	end
 end
 
+local function IsArray<T, K, V>(Tbl: T & {[K]: V}): (T & {V})?
+	return if Tbl[1] then Tbl :: {V} else nil
+end
+
 local function GetClassLength<T>(self: T & {Size: number})
 	return self.Size
 end
@@ -1468,20 +1472,21 @@ local function GetImportanceSortedColorsUint32(
 	Histogram: {number},
 	HueStats: HueStatistics,
 	InitColors: number,
-	Method: Method,
+	IsGlobalPopulation: boolean,
 )
 	local Keys = {}
 
 	for Key in Histogram do
 		table.insert(Keys, Key)
 	end
-	if #Keys == 0 then return {} end
+	if #Keys == 0 then
+		error("[Quack] No colors inside histogram")
+	end
 
 	table.sort(Keys, function(A, B)
 		return (Histogram[B] - Histogram[A]) > 0
 	end)
 
-	local IsGlobalPopulation = Method == "GlobalPopulation"
 	local Uint32Indexs = if IsGlobalPopulation then table.clone(Keys) else Keys
 
 	if IsGlobalPopulation then
@@ -1520,27 +1525,12 @@ local function GetImportanceSortedColorsUint32(
 	return Uint32Indexs
 end
 
--- global top-population
-local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats: HueStatistics)
-	for _, R, G, B, A in ImageData do
-		local Uint32 = RGBAToUint32(R, G, B, A)
-
-		CheckHueStatistics(HueStats, Uint32)
-
-		if Histogram[Uint32] then
-			Histogram[Uint32] += 1
-		else
-			Histogram[Uint32] = 1
-		end
-	end
-end
-
 -- partitions a rectangle of width x height into an array of boxes stepX x stepY (or less)
 local function MakeBoxes(Width: number, Height: number, StepX: number, StepY: number)
-	local wrem = width % stepX;
-	local hrem = height % stepY;
-	local xend = width - wrem;
-	local yend = height - hrem;
+	local wrem = width % stepX
+	local hrem = height % stepY
+	local xend = width - wrem
+	local yend = height - hrem
 	local Boxes = table.create(Height * Width)
 
 	local BoxHeight = BoundingBox[4]
@@ -1644,19 +1634,158 @@ end
 -- Quantization
 --------------------------------------------------------------------------------
 
-local DistanceIncrement = 0.005
-local InitalDistance = 0.01
+local DefualtDistanceIncrement = 0.005
+local DefualtInitalDistance = 0.01
+local HueGroups = 10
 
 local function Quantize(
+	ImageOrImages: ImageData | {ImageData},
 	Calculator: DistanceCalcuator,
 	Method: Method,
-	Colors: number
+	Colors: number,
+	DistanceIncrement: number?,
+	InitalDistance: number?,
 )
+	-- subsequent passes threshold
+	local DistanceIncrement = DistanceIncrement or DefualtDistanceIncrement
+	-- color-distance threshold for initial reduction pass
+	local InitalDistance = InitalDistance or DefualtInitalDistance
+	local IsGlobalPopulation = Method == "GlobalPopulation"
 	-- # of highest-frequency colors to start with for palette reduction
 	local InitalColors = bit32.lshift(Colors, 2)
 	-- if > 0, enables hues stats and min-color retention per group
-	local MinHueCols = bit32.lshift(Colors, 2)
+	local MinHueColors = bit32.lshift(Colors, 2)
+	-- accumulated histogram
+	local Histogram = {} :: {number}
 
+	local HueStats = CreateHueStatistics(
+		HueGroups,
+		MinHueColors
+	)
+
+	-- gathers histogram info
+	if IsGlobalPopulation then
+		local BoxHeight = 64
+		local BoxWidth = 64
+		local BoxPixels = 2
+
+		if IsArray(ImagesOrImages) then
+			for _, ImageData in ImagesOrImages then
+				ColorStats2D(
+					ImageData, Histogram, HueStats, BoxPixels, BoxWidth, BoxHeight
+				)
+			end
+		else
+			ColorStats2D(
+				ImagesOrImages, Histogram, HueStats, BoxPixels, BoxWidth, BoxHeight
+			)
+		end
+	else
+		if IsArray(ImagesOrImages) then
+			for _, ImageData in ImagesOrImages then
+				ColorStats1D(ImageData, Histogram, HueStats)
+			end
+		else
+			ColorStats1D(ImagesOrImages, Histogram, HueStats)
+		end
+	end
+  
+	local Uint32Indexs = GetImportanceSortedColorsUint32(
+		Histogram, HueStats, InitalColors, IsGlobalPopulation
+	)
+  
+	-- reduces histogram to palette, remaps & memoizes reduced colors
+	*quantize() {
+	  const idxi32 = this._histogram.getImportanceSortedColorsIDXI32();
+	  if (idxi32.length === 0) {
+		throw new Error('No colors in image');
+	  }
+  
+	  yield* this._buildPalette(idxi32);
+	}
+  
+	-- reduces similar colors from an importance-sorted Uint32 rgba array
+	private *_buildPalette(
+	  idxi32: number[],
+	): IterableIterator<PaletteQuantizerYieldValue> {
+	  -- reduce histogram to create initial palette
+	  -- build full rgb palette
+	  const palette = new Palette();
+	  const colorArray = palette.getPointContainer().getPointArray();
+	  const usageArray = new Array(idxi32.length);
+  
+	  for (let i = 0; i < idxi32.length; i++) {
+		colorArray.push(Point.createByUint32(idxi32[i]));
+		usageArray[i] = 1;
+	  }
+  
+	  const len = colorArray.length;
+	  const memDist = [];
+  
+	  let palLen = len;
+	  let thold = this._initialDistance;
+  
+	  -- palette already at or below desired length
+	  while (palLen > this._colors) {
+		memDist.length = 0;
+  
+		-- iterate palette
+		for (let i = 0; i < len; i++) {
+		  if (usageArray[i] === 0) continue;
+		  const pxi = colorArray[i];
+		  -- if (!pxi) continue;
+  
+		  for (let j = i + 1; j < len; j++) {
+			if (usageArray[j] === 0) continue;
+			const pxj = colorArray[j];
+			-- if (!pxj) continue;
+  
+			const dist = this._distance.calculateNormalized(pxi, pxj);
+			if (dist < thold) {
+			  -- store index,rgb,dist
+			  memDist.push(new RemovedColor(j, pxj, dist));
+			  usageArray[j] = 0;
+			  palLen--;
+			}
+		  }
+		}
+	  -- palette reduction pass
+		-- console.log("palette length: " + palLen);
+  
+		-- if palette is still much larger than target, increment by larger initDist
+		thold +=
+		  palLen > this._colors * 3
+			? this._initialDistance
+			: this._distanceIncrement;
+	  }
+  
+	  -- if palette is over-reduced, re-add removed colors with largest distances from last round
+	  if (palLen < this._colors) {
+		-- sort descending
+		stableSort(memDist, (a, b) => b.distance - a.distance);
+  
+		let k = 0;
+		while (palLen < this._colors && k < memDist.length) {
+		  const removedColor = memDist[k];
+		  // re-inject rgb into final palette
+		  usageArray[removedColor.index] = 1;
+		  palLen++;
+		  k++;
+		}
+	  }
+  
+	  let colors = colorArray.length;
+	  for (let colorIndex = colors - 1; colorIndex >= 0; colorIndex--) {
+		if (usageArray[colorIndex] === 0) {
+		  if (colorIndex !== colors - 1) {
+			colorArray[colorIndex] = colorArray[colors - 1];
+		  }
+		  --colors;
+		}
+	  }
+	  colorArray.length = colors;
+  
+	  palette.sort();
 
 end
 
