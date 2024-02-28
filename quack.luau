@@ -362,7 +362,7 @@ local function GetRGBA(
 end
 
 local function IsArray<T, K, V>(Tbl: T & {[K]: V}): (T & {V})?
-	return if Tbl[1] then Tbl :: {V} else nil
+	return if Tbl[1] then Tbl :: any else nil
 end
 
 local function GetClassLength<T>(self: T & {Size: number})
