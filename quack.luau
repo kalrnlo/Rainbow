@@ -8,36 +8,6 @@
 -- @Kalrnlo
 -- 27/02/2024
 
---[[
-local Image = Quant.ImageData.new(EditableImage)
-
--- Palette class has an iterator like this aswell
-for Index, R, G, B, A in Image1 do
-	print(`Pixel({Index}) {R}, {G}, {B}, {A}`)
-end
-
-local ImageData = Quack.Dither("FloydSteinberg", {Image, Image2}, Palette)
-
-local Palette, ImageData = Quack.QuantizeAsync(Image, {
-	DitheringMethod = "FloydSteinberg",
-	DistanceFormula = "Manhattan",
-	Method = "GlobalPopulation",
-	Colors = 256
-}):Await()
-
-local Palette, ImageData = Quack.Quantize(Image, {
-	DitheringMethod = "FloydSteinberg",
-	DistanceFormula = "Manhattan",
-	Method = "GlobalPopulation",
-	Colors = 256
-})
-
-local Palette = Quack.Palettize(Image, {
-	DistanceFormula = "Manhattan",
-	Colors = 256
-})
---]]
-
 local Future = require(script.Parent.Future)
 
 export type DitheringMethod = ArrayDitheringMethod | "ErrorDiffusionRiemersma" | "NearestColor"
