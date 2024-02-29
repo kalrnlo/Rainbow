@@ -16,7 +16,7 @@ for Index, R, G, B, A in Image1 do
 	print(`Pixel({Index}) {R}, {G}, {B}, {A}`)
 end
 
-local ImageData = Quack.Dither({Image, Image2}, "FloydSteinberg", Palette)
+local ImageData = Quack.Dither("FloydSteinberg", {Image, Image2}, Palette)
 
 local Palette, ImageData = Quack.QuantizeAsync(Image, {
 	DitheringMethod = "FloydSteinberg",
@@ -40,9 +40,7 @@ local Palette = Quack.Palettize(Image, {
 
 local Future = require(script.Parent.Future)
 
-export type DitheringMethod = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
-	"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite" | 
-	"ErrorDiffusionRiemersma" | "NearestColor"
+export type DitheringMethod = ArrayDitheringMethod | "ErrorDiffusionRiemersma" | "NearestColor"
 
 export type DistanceFormula = "Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
 	"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant"
@@ -65,23 +63,32 @@ export type PaletteInfo = {
 
 export type DitheringInfo = {
 		DitheringMethod: "NearestColor"?
-	} | {
+	} | (ErrorDiffusionArrayInfo & {
 		DitheringMethod: "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
 			"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite",
-		MinimumColorDistanceToDither: number?,
-		CalculateErrorLikeGIMP: boolean?,
-		Serpentine: boolean?,
-	} | {
+	}) | (ErrorDiffusionRiemersmaInfo & {
 		DitheringMethod: "ErrorDiffusionRiemersma",
-		ErrorPropagation: number?,
-		ErrorQueueSize: number?,
-	}
+	})
 
 export type QuantizeInfo = DitheringInfo & PalletizeInfo
+
+type ArrayDitheringMethod = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
+	"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite"
 
 type ImageOrImages = {ImageData} | {EditableImage} | EditableImage | ImageData
 
 type RGBAType = "buffer" | "table" | "Color3" | "number"
+
+type ErrorDiffusionRiemersmaInfo = {
+	ErrorPropagation: number?,
+	ErrorQueueSize: number?,
+}
+
+type ErrorDiffusionArrayInfo = {
+	MinimumColorDistanceToDither: number?,
+	CalculateErrorLikeGIMP: boolean?,
+	Serpentine: boolean?,
+}
 
 type HueStatistics = {
 	GroupAmount: number,
@@ -1808,36 +1815,6 @@ end
 -- Exports
 --------------------------------------------------------------------------------
 
-export type PalletizeInfo = PaletteInfo & {
-	Method: ("GlobalPopulation" | "SubRegionPopulation")?,
-}
-
-export type PaletteInfo = {
-	DistanceFormula: ("Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
-		"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant")?,
-	MaxColors: number?,
-	R: number?,
-	G: number?,
-	B: number?,
-	A: number?,
-}
-
-export type DitheringInfo = {
-		DitheringMethod: "NearestColor"?
-	} | {
-		DitheringMethod: "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
-			"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite",
-		MinimumColorDistanceToDither: number?,
-		CalculateErrorLikeGIMP: boolean?,
-		Serpentine: boolean?,
-	} | {
-		DitheringMethod: "ErrorDiffusionRiemersma",
-		ErrorPropagation: number?,
-		ErrorQueueSize: number?,
-	}
-
-export type QuantizeInfo = DitheringInfo & PalletizeInfo
-
 local function GetImageDatasFromImageOrImages(ImageOrImages: ImageOrImages)
 	if IsArray(ImagesOrImages) then
 		if typeof(ImagesOrImages[1]) == "Instance" then
@@ -1851,8 +1828,66 @@ local function GetImageDatasFromImageOrImages(ImageOrImages: ImageOrImages)
 	return ImageOrImages
 end
 
-local GetDitheringFunction(DitheringMethod: DitheringMethod)
+local function Dither(
+	DitheringMethod: DitheringMethod,
+	ImageOrImages: ImageOrImages,
+	Palette: Palette, 
+	Info: DitheringInfo
+)
+	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
 
+	if IsArray(ImageOrImages) then
+		if DitheringMethod == "ErrorDiffusionRiemersma" then
+			for _, ImageData in ImageOrImages do
+				Dither_ErrorDiffusionRiemersma(
+					Palette.Calculator,
+					ImageData,
+					Palette,
+					Info.ErrorPropagation,
+					Info.ErrorQueueSize
+				)
+			end
+		elseif DitheringMethod == "NearestColor" then
+			for _, ImageData in ImageOrImages do
+				Dither_NearestColor(Palette.Calculator, ImageData, Palette)
+			end
+		else
+			for _, ImageData in ImageOrImages do
+				Dither_ErrorDiffusionArray(
+					Palette.Calculator,
+					ImageData,
+					Palette,
+					DitheringMethod,
+					Info.Serpentine,
+					Info.MinimumColorDistanceToDither,
+					Info.CalculateErrorLikeGIMP
+				)
+			end
+		end
+	else
+		if DitheringMethod == "ErrorDiffusionRiemersma" then
+			Dither_ErrorDiffusionRiemersma(
+				Palette.Calculator,
+				ImageOrImages,
+				Palette,
+				Info.ErrorPropagation,
+				Info.ErrorQueueSize
+			)
+		elseif DitheringMethod == "NearestColor" then
+			Dither_NearestColor(Palette.Calculator, ImageOrImages, Palette)
+		else
+			Dither_ErrorDiffusionArray(
+				Palette.Calculator,
+				ImageOrImages,
+				Palette,
+				DitheringMethod,
+				Info.Serpentine,
+				Info.MinimumColorDistanceToDither,
+				Info.CalculateErrorLikeGIMP
+			)
+		end
+	end
+	return ImageOrImages
 end
 
 local function Palletize(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
@@ -1862,8 +1897,8 @@ local function Palletize(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
 	)
 
 	return BuildPalette(
-		ImageOrImages, Calculator, Info.Method or "GlobalPopulation", Info.MaxColors or 256, 
-		Info.DistanceIncrement, Info.InitalDistance
+		ImageOrImages, Calculator, Info.Method or "GlobalPopulation", 
+		Info.MaxColors or 256, Info.DistanceIncrement, Info.InitalDistance
 	)
 end
 
@@ -1872,53 +1907,89 @@ local function Quantize(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
 	local Calculator = CreateCalcuator(
 		Info.DistanceFormula or "ManhattanBT709", Info.R, Info.G, Info.B, Info.A
 	)
-	local Method = Info.Method or "GlobalPopulation"
-	local MaxColors = Info.MaxColors or 256
 
 	local Palette = BuildPalette(
-		ImageOrImages, Calculator, Method, MaxColors, Info.DistanceIncrement, Info.InitalDistance
+		ImageOrImages, Calculator, Info.Method or "GlobalPopulation",
+		Info.MaxColors or 256, Info.DistanceIncrement, Info.InitalDistance
+	)
+
+	return Palette, Dither(
+		Info.DitheringMethod or "NearestColor",
+		ImageOrImages,
+		Palette, 
+		Info
 	)
 end
 
-local function Dither(
-	ImageOrImages: ImageOrImages,
-	DitheringMethod: DitheringMethod,
-	Palette: Palette, 
-	Info: DitheringInfo
-)
-	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
-	
-
-end
-
 local function PalletizeAsync(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
-	return Future.new(Palletize, ImageOrImages, Info)
+	return Future.Try(Palletize, ImageOrImages, Info)
 end
 
 local function QuantizeAsync(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
-	return Future.new(Quantize, ImageOrImages, Info)
+	return Future.Try(Quantize, ImageOrImages, Info)
 end
 
 local function DitherAsync(
-	ImageOrImages: ImageOrImages,
 	DitheringMethod: DitheringMethod,
+	ImageOrImages: ImageOrImages,
 	Palette: Palette, 
 	Info: DitheringInfo
 )
-	return Future.new(Dither, ImagesOrImages, DitheringMethod, Palette, Info)
+	return Future.Try(Dither, DitheringMethod, ImageOrImages, Palette, Info)
 end
 
 local Exports = table.freeze({
+	DitherAsync = DitherAsync :: ((DitheringMethod: "NearestColor", Image: ImageData | EditableImage, Palette: Palette) -> Future.Future<boolean, ImageData>) &
+		((DitheringMethod: "NearestColor", Images: {ImageData}, Palette: Palette) -> Future.Future<boolean, {ImageData}>) &
+		((DitheringMethod: "NearestColor", EditableImage: EditableImage, Palette: Palette) -> Future.Future<boolean, ImageData>) &,
+		((DitheringMethod: "NearestColor", EditableImages: {EditableImage}, Palette: Palette) -> Future.Future<boolean, {ImageData}>) &
+		((DitheringMethod: ArrayDitheringMethod, Image: ImageData | EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, ImageData>) &
+		((DitheringMethod: ArrayDitheringMethod, Images: {ImageData}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, {ImageData}>) &
+		((DitheringMethod: ArrayDitheringMethod, EditableImage: EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, ImageData>) &
+		((DitheringMethod: ArrayDitheringMethod, EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, {ImageData}>) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", Image: ImageData | EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, ImageData>) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", Images: {ImageData}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, {ImageData}>) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImage: EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, ImageData>) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, {ImageData}>),
+
+	Dither = Dither :: ((DitheringMethod: "NearestColor", Image: ImageData | EditableImage, Palette: Palette) -> ImageData) &
+		((DitheringMethod: "NearestColor", Images: {ImageData}, Palette: Palette) -> {ImageData}) &
+		((DitheringMethod: "NearestColor", EditableImage: EditableImage, Palette: Palette) -> ImageData) &,
+		((DitheringMethod: "NearestColor", EditableImages: {EditableImage}, Palette: Palette) -> {ImageData}) &
+		((DitheringMethod: ArrayDitheringMethod, Image: ImageData | EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> ImageData) &
+		((DitheringMethod: ArrayDitheringMethod, Images: {ImageData}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> {ImageData}) &
+		((DitheringMethod: ArrayDitheringMethod, EditableImage: EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> ImageData) &
+		((DitheringMethod: ArrayDitheringMethod, EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> {ImageData}) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", Image: ImageData | EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> ImageData) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", Images: {ImageData}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> {ImageData}) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImage: EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> ImageData) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> {ImageData}),	
+
+	QuantizeAsync = QuantizeAsync :: ((Image: ImageData, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette, ImageData>) &
+		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette, {ImageData}>) &
+		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette, ImageData>) &
+		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette, {ImageData}>),
+
 	ImageData = CreateImageData :: ((Pixels: {number}, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<{number}>) &
 		((Pixels: buffer, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<buffer>) &
 		((EditableImage: EditableImage) -> ImageData<{number}>),
-	PalletizeAsync = PalletizeAsync,
-	QuantizeAsync = QuantizeAsync,
-	DitherAsync = DitherAsync,
+
+	PalletizeAsync = PalletizeAsync :: ((Image: ImageData, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette>) &
+		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette>) &
+		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette>) &
+		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette>),
+
+	Quantize = Quantize:: ((Image: ImageData, PalletizeInfo: PalletizeInfo) -> (Palette, ImageData)) &
+		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> (Palette, {ImageData})) &
+		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> (Palette, ImageData)) &
+		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> (Palette, {ImageData})),
+
+	Palettize = Palletize :: ((Image: ImageData, PalletizeInfo: PalletizeInfo) Palette) &
+		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> Palette) &
+		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> Palette) &
+		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> Palette),
+
 	Palette = CreatePalette,
-	Palettize = Palettize,
-	Quantize = Quantize,
-	Dither = Dither,
 })
 
 return Exports
