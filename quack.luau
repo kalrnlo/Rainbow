@@ -80,6 +80,8 @@ export type DitheringInfo = {
 
 export type QuantizeInfo = DitheringInfo & PalletizeInfo
 
+type ImageOrImages = {ImageData} | {EditableImage} | EditableImage | ImageData
+
 type RGBAType = "buffer" | "table" | "Color3" | "number"
 
 type HueStatistics = {
@@ -1479,7 +1481,7 @@ local function GetImportanceSortedColorsUint32(
 	Histogram: {number},
 	HueStats: HueStatistics,
 	InitColors: number,
-	IsGlobalPopulation: boolean,
+	IsGlobalPopulation: boolean
 )
 	local Keys = {}
 
@@ -1645,13 +1647,13 @@ local DefualtDistanceIncrement = 0.005
 local DefualtInitalDistance = 0.01
 local HueGroups = 10
 
-local function Quantize(
+local function PaletteBuilder(
 	ImageOrImages: ImageData | {ImageData},
 	Calculator: DistanceCalcuator,
 	Method: Method,
 	MaxColors: number,
 	DistanceIncrement: number?,
-	InitalDistance: number?,
+	InitalDistance: number?
 )
 	-- subsequent passes threshold
 	local DistanceIncrement = DistanceIncrement or DefualtDistanceIncrement
@@ -1803,11 +1805,45 @@ local function Quantize(
 	return Palette
 end
 
+--------------------------------------------------------------------------------
+-- Exports
+--------------------------------------------------------------------------------
+
+local function Palletize(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
+
+end
+
+local function Quantize(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
+
+end
+
+local function Dither(ImageOrImages: ImageOrImages, Info: DitheringInfo)
+
+end
+
+local function PalletizeAsync(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
+
+end
+
+local function QuantizeAsync(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
+
+end
+
+local function DitherAsync(ImageOrImages: ImageOrImages, Info: DitheringInfo)
+
+end
+
 local Exports = table.freeze({
 	ImageData = CreateImageData :: ((Pixels: {number}, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<{number}>) &
 		((Pixels: buffer, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<buffer>) &
 		((EditableImage: EditableImage) -> ImageData<{number}>),
+	PalletizeAsync = PalletizeAsync,
+	QuantizeAsync = QuantizeAsync,
+	DitherAsync = DitherAsync,
 	Palette = CreatePalette,
+	Palettize = Palettize,
+	Quantize = Quantize,
+	Dither = Dither,
 })
 
 return Exports
