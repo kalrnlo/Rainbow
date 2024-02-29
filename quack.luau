@@ -1647,7 +1647,7 @@ local DefualtDistanceIncrement = 0.005
 local DefualtInitalDistance = 0.01
 local HueGroups = 10
 
-local function PaletteBuilder(
+local function BuildPalette(
 	ImageOrImages: ImageData | {ImageData},
 	Calculator: DistanceCalcuator,
 	Method: Method,
@@ -1809,28 +1809,85 @@ end
 -- Exports
 --------------------------------------------------------------------------------
 
+export type PalletizeInfo = PaletteInfo & {
+	Method: ("GlobalPopulation" | "SubRegionPopulation")?,
+}
+
+export type PaletteInfo = {
+	DistanceFormula: ("Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
+		"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant")?,
+	MaxColors: number?,
+	R: number?,
+	G: number?,
+	B: number?,
+	A: number?,
+}
+
+export type DitheringInfo = {
+		DitheringMethod: "NearestColor"?
+	} | {
+		DitheringMethod: "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
+			"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite",
+		MinimumColorDistanceToDither: number?,
+		CalculateErrorLikeGIMP: boolean?,
+		Serpentine: boolean?,
+	} | {
+		DitheringMethod: "ErrorDiffusionRiemersma",
+		ErrorPropagation: number?,
+		ErrorQueueSize: number?,
+	}
+
+export type QuantizeInfo = DitheringInfo & PalletizeInfo
+
+local function GetImageDatasFromImageOrImages(ImageOrImages: ImageOrImages)
+	if IsArray(ImagesOrImages) then
+		if typeof(ImagesOrImages[1]) == "Instance" then
+			for Index, EditableImage in ImagesOrImages do
+				ImagesOrImages[Index] = CreateImageData(EditableImage)
+			end
+		end
+	elseif typeof(ImageOrImages) == "Instance" then
+		return CreateImageData(ImagesOrImages)
+	end
+	return ImageOrImages
+end
+
 local function Palletize(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
+	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
 
 end
 
 local function Quantize(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
+	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
 
+
+
+	ImageOrImages: ImageData | {ImageData},
+	Calculator: DistanceCalcuator,
+	Method: Method,
+	MaxColors: number,
+	DistanceIncrement: number?,
+	InitalDistance: number?
+	local Palette = BuildPalette(
+		ImageOrImages
+	)
 end
 
 local function Dither(ImageOrImages: ImageOrImages, Info: DitheringInfo)
+	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
 
 end
 
 local function PalletizeAsync(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
-
+	return Future.new(Palletize, ImageOrImages, Info)
 end
 
 local function QuantizeAsync(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
-
+	return Future.new(Quantize, ImageOrImages, Info)
 end
 
 local function DitherAsync(ImageOrImages: ImageOrImages, Info: DitheringInfo)
-
+	return Future.new(Dither, ImageOrImages, Info)
 end
 
 local Exports = table.freeze({
