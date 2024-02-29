@@ -338,7 +338,7 @@ local function GetRGBA(
 	end
 end
 
-local function IsArray<T, K, V>(Tbl: T & {[K]: V}): (T & {V})?
+local function IsArray<T, K, V>(Tbl: T & {[K]: V}): (T & {[number]: V})?
 	return if Tbl[1] then Tbl :: any else nil
 end
 
