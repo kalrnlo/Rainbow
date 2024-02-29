@@ -16,8 +16,7 @@ for Index, R, G, B, A in Image1 do
 	print(`Pixel({Index}) {R}, {G}, {B}, {A}`)
 end
 
-local ImageData = Quack.Dither("FloydSteinberg", Palette, {Image, Image2})
-local ImageData = Quack.Dither("FloydSteinberg", Palette, Image)
+local ImageData = Quack.Dither({Image, Image2}, "FloydSteinberg", Palette)
 
 local Palette, ImageData = Quack.QuantizeAsync(Image, {
 	DitheringMethod = "FloydSteinberg",
@@ -1852,29 +1851,43 @@ local function GetImageDatasFromImageOrImages(ImageOrImages: ImageOrImages)
 	return ImageOrImages
 end
 
+local GetDitheringFunction(DitheringMethod: DitheringMethod)
+
+end
+
 local function Palletize(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
 	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
+	local Calculator = CreateCalcuator(
+		Info.DistanceFormula or "ManhattanBT709", Info.R, Info.G, Info.B, Info.A
+	)
 
+	return BuildPalette(
+		ImageOrImages, Calculator, Info.Method or "GlobalPopulation", Info.MaxColors or 256, 
+		Info.DistanceIncrement, Info.InitalDistance
+	)
 end
 
 local function Quantize(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
 	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
+	local Calculator = CreateCalcuator(
+		Info.DistanceFormula or "ManhattanBT709", Info.R, Info.G, Info.B, Info.A
+	)
+	local Method = Info.Method or "GlobalPopulation"
+	local MaxColors = Info.MaxColors or 256
 
-
-
-	ImageOrImages: ImageData | {ImageData},
-	Calculator: DistanceCalcuator,
-	Method: Method,
-	MaxColors: number,
-	DistanceIncrement: number?,
-	InitalDistance: number?
 	local Palette = BuildPalette(
-		ImageOrImages
+		ImageOrImages, Calculator, Method, MaxColors, Info.DistanceIncrement, Info.InitalDistance
 	)
 end
 
-local function Dither(ImageOrImages: ImageOrImages, Info: DitheringInfo)
+local function Dither(
+	ImageOrImages: ImageOrImages,
+	DitheringMethod: DitheringMethod,
+	Palette: Palette, 
+	Info: DitheringInfo
+)
 	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
+	
 
 end
 
@@ -1886,8 +1899,13 @@ local function QuantizeAsync(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
 	return Future.new(Quantize, ImageOrImages, Info)
 end
 
-local function DitherAsync(ImageOrImages: ImageOrImages, Info: DitheringInfo)
-	return Future.new(Dither, ImageOrImages, Info)
+local function DitherAsync(
+	ImageOrImages: ImageOrImages,
+	DitheringMethod: DitheringMethod,
+	Palette: Palette, 
+	Info: DitheringInfo
+)
+	return Future.new(Dither, ImagesOrImages, DitheringMethod, Palette, Info)
 end
 
 local Exports = table.freeze({
