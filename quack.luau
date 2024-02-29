@@ -958,7 +958,7 @@ local function Palette_Sort(self: Palette)
 		local LumB = GetRGBALuminosity(BR, BG, BB, BA)
 		local LumDiff = LumB - LumA
 
-		if LumDiff ~= 0 then return LumDiff > 0
+		if LumDiff ~= 0 then return LumDiff > 0 end
 		local ASat = AS * 100
 		local BSat = BS * 100
 		local SatDiff = (if BSat > 0 then BSat else 0) - (if ASat > 0 then ASat else 0)
