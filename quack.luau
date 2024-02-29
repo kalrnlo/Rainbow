@@ -58,31 +58,23 @@ type PalletizeInfo = {
 	Method: ("GlobalPopulation" | "SubRegionPopulation")?,
 }
 
-type DitheringInfo = ({
+type DitheringInfo = {
 		DitheringMethod: "NearestColor"?
-	} & (ErrorDiffusionArrayInfo & {
+	} | {
 		DitheringMethod: "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
-			"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite"
-	}) & (ErrorDiffusionRiemersmaInfo & {
-		DitheringMethod: "ErrorDiffusionRiemersma"
-	})
-)
+			"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite",
+		MinimumColorDistanceToDither: number?,
+		CalculateErrorLikeGIMP: boolean?,
+		Serpentine: boolean?,
+	} | {
+		DitheringMethod: "ErrorDiffusionRiemersma",
+		ErrorPropagation: number?,
+		ErrorQueueSize: number?,
+	}
 
-type ErrorDiffusionRiemersmaInfo = {
-	ErrorPropagation: number?,
-	ErrorQueueSize: number?,
-}
-
-type ErrorDiffusionArrayInfo = {
-	MinimumColorDistanceToDither: number?,
-	CalculateErrorLikeGIMP: boolean?,
-	Serpentine: boolean?,
-}
+type QuantizeInfo = DitheringInfo & PalletizeInfo
 
 type HueStatistics = {
-	InjectIntoDictionary: (self: HueStatistics, Histogram: {[number]: number}) -> (),
-	InjectIntoArray: (self: HueStatistics, Histogram: {number}) -> (),
-	Check: (self: HueStatistics, Uint32: number) -> (),
 	GroupAmount: number,
 	GroupsFull: number,
 	MinColors: number,
@@ -91,7 +83,6 @@ type HueStatistics = {
 
 type PaletteInfo = {
 	DistanceFormula: DistanceFormula?,
-	Calculator: DistanceCalcuator?,
 	MaxColors: number?,
 	R: number,
 	G: number,
@@ -148,14 +139,14 @@ type PalettePrototype = {
 	__len: (self: Palette) -> number,
 }
 
-type ImageData<T> = typeof(setmetatable({} :: {
+export type ImageData<T> = typeof(setmetatable({} :: {
 	Pixels: T & ({number} | buffer),
 	Height: number,
 	Width: number,
 	Size: number,
 }, {} :: ImageDataPrototype<T>))
 
-type Palette = typeof(setmetatable({} :: {
+export type Palette = typeof(setmetatable({} :: {
 	Calcuator: DistanceCalcuator,
 	Uint32Indexs: {number},
 	Colors: {buffer},
@@ -1628,7 +1619,7 @@ local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats:
 	for _, R, G, B, A in ImageData do
 		local Uint32 = RGBAToUint32(R, G, B, A)
 
-		CheckHueStatistics(HueStats, Uint32)Up
+		CheckHueStatistics(HueStats, Uint32)
 
 		if Histogram[Uint32] then
 			Histogram[Uint32] += 1
