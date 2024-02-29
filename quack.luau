@@ -41,24 +41,30 @@ local Palette = Quack.Palettize(Image, {
 
 local Future = require(script.Parent.Future)
 
-type DitheringMethod = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
+export type DitheringMethod = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
 	"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite" | 
 	"ErrorDiffusionRiemersma" | "NearestColor"
 
-type DistanceFormula = "Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
+export type DistanceFormula = "Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
 	"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant"
 
-type Method = "GlobalPopulation" | "SubRegionPopulation"
+export type Method = "GlobalPopulation" | "SubRegionPopulation"
 
-type RGBAType = "buffer" | "table" | "Color3" | "number"
-
-type PalletizeInfo = {
-	DistanceFormula: ("Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
-		"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant")?,
+export type PalletizeInfo = PaletteInfo & {
 	Method: ("GlobalPopulation" | "SubRegionPopulation")?,
 }
 
-type DitheringInfo = {
+export type PaletteInfo = {
+	DistanceFormula: ("Manhattan" | "Euclidean" | "ManhattanBT709" | "CMetric" |
+		"ManhattanNommyde" | "EuclideanBT709" | "PNGQuant")?,
+	MaxColors: number?,
+	R: number?,
+	G: number?,
+	B: number?,
+	A: number?,
+}
+
+export type DitheringInfo = {
 		DitheringMethod: "NearestColor"?
 	} | {
 		DitheringMethod: "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
@@ -72,7 +78,9 @@ type DitheringInfo = {
 		ErrorQueueSize: number?,
 	}
 
-type QuantizeInfo = DitheringInfo & PalletizeInfo
+export type QuantizeInfo = DitheringInfo & PalletizeInfo
+
+type RGBAType = "buffer" | "table" | "Color3" | "number"
 
 type HueStatistics = {
 	GroupAmount: number,
