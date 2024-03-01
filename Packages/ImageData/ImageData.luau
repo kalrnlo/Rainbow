@@ -127,7 +127,7 @@ local ImageDataPrototype = {
 ImageDataPrototype.__index = ImageDataPrototype
 
 local function FromArray(Pixels: {number}, Width: number, Height: number, Copy: boolean?): ImageData<{number}>
-	local CopyPixels = Copy or true
+	local CopyPixels = if Copy == nil then true else Copy
 	local NewPixels = if CopyPixels then table.clone(Pixels) else Pixels
 
 	return setmetatable({
@@ -140,7 +140,7 @@ end
 
 local function FromBuffer(Pixels: buffer, Width: number, Height: number, Copy: boolean?): ImageData<buffer>
 	local Length = buffer.len(Pixels)
-	local CopyPixels = Copy or true
+	local CopyPixels = if Copy == nil then true else Copy
 	local NewPixels = if CopyPixels then buffer.create(Length) else Pixels
 
 	if CopyPixels then
