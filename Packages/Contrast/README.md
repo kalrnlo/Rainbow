@@ -1,2 +1,2 @@
-# quack
-A lightweight-ish color quantization library for luau
+# Contrast
+APCA Color contrast utility
