@@ -33,10 +33,10 @@ export type PaletteInfo = {
 
 export type DitheringInfo = {
 		DitheringMethod: "NearestColor"?
-	} | (ErrorDiffusionArrayInfo & {
+	} & (ErrorDiffusionArrayInfo & {
 		DitheringMethod: "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
 			"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite",
-	}) | (ErrorDiffusionRiemersmaInfo & {
+	}) & (ErrorDiffusionRiemersmaInfo & {
 		DitheringMethod: "ErrorDiffusionRiemersma",
 	})
 
@@ -45,7 +45,7 @@ export type QuantizeInfo = DitheringInfo & PalletizeInfo
 type ArrayDitheringMethod = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" | "Atkinson" |
 	"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite"
 
-type ImageOrImages = {ImageData} | {EditableImage} | EditableImage | ImageData
+type ImageOrImages<T> = {ImageData<T>} | {EditableImage} | EditableImage | ImageData<T>
 
 type RGBAType = "buffer" | "table" | "Color3" | "number"
 
@@ -67,15 +67,6 @@ type HueStatistics = {
 	Stats: {HueGroup},
 }
 
-type PaletteInfo = {
-	DistanceFormula: DistanceFormula?,
-	MaxColors: number?,
-	R: number,
-	G: number,
-	B: number,
-	A: number,
-}
-
 type HueGroup = {
 	Colors: {number},
 	Amount: number,
@@ -86,17 +77,6 @@ type DistanceFormulaDefaults = {
     KG: number,
     KB: number,
     KA: number,   
-}
-
-type ImageDataPrototype<T> = {
-	Set: ((self: ImageData<T>, Index: number, R: number, G: number, B: number, A: number?) -> ()) &
-		((self: ImageData<T>, Index: number,  Color3: Color3) -> ()) &
-		((self: ImageData<T>, Index: number, RGBOrRGBA: {number}) -> ()) &
-		((self: ImageData<T>, Index: number, RGBOrRGBA: buffer) -> ()),
-	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
-	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
-	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
-	__len: (self: ImageData<T>) -> number,
 }
 
 type PalettePrototype = {
@@ -130,17 +110,26 @@ export type ImageData<T> = typeof(setmetatable({} :: {
 	Height: number,
 	Width: number,
 	Size: number,
-}, {} :: ImageDataPrototype<T>))
+}, {} :: {
+	Set: ((self: ImageData<T>, Index: number, R: number, G: number, B: number, A: number?) -> ()) &
+		((self: ImageData<T>, Index: number,  Color3: Color3) -> ()) &
+		((self: ImageData<T>, Index: number, RGBOrRGBA: {number}) -> ()) &
+		((self: ImageData<T>, Index: number, RGBOrRGBA: buffer) -> ()),
+	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
+	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
+	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
+	__len: (self: ImageData<T>) -> number,
+}))
 
 export type Palette = typeof(setmetatable({} :: {
-	Calcuator: DistanceCalcuator,
+	Calculator: DistanceCalculator,
 	Uint32Indexs: {number},
 	Colors: {buffer},
 	Size: number,
 }, {} :: PalettePrototype))
 
 type CalcuatorFunction = (
-    self: DistanceCalcuator,
+    self: DistanceCalculator,
     R1: number,
     G1: number,
     B1: number,
@@ -151,10 +140,11 @@ type CalcuatorFunction = (
     A2: number
 ) -> number
 
-type DistanceCalcuator = {
+type DistanceCalculator = {
 	CalcuateNormalized: CalcuatorFunction,
     Defualts: DistanceFormulaDefaults,
     CalculateRaw: CalcuatorFunction,
+	MaxDistance: number,
     WhitepointR: number,
     WhitepointG: number,
     WhitepointB: number,
@@ -204,11 +194,11 @@ local BT709 = {
 -- Luminance (perceived option 2, slower to calculate):  sqrt( 0.241*R^2 + 0.691*G^2 + 0.068*B^2 ) ? sqrt( 0.299*R^2 + 0.587*G^2 + 0.114*B^2 ) (thanks to @MatthewHerbst) [http://alienryderflex.com/hsp.html]
 local function GetRGBALuminosity(R: number, G: number, B: number, A: number?)
 	if A then
-		return (math.min(255, (255 - A + (A * R)) / 255) * Y.RED) +
-			(math.min(255, (255 - A + (A * G)) / 255) * Y.GREEN) +
-			(math.min(255, (255 - A + (A * B)) / 255) * Y.BLUE)
+		return (math.min(255, (255 - A + (A * R)) / 255) * BT709.Y.RED) +
+			(math.min(255, (255 - A + (A * G)) / 255) * BT709.Y.GREEN) +
+			(math.min(255, (255 - A + (A * B)) / 255) * BT709.Y.BLUE)
 	else
-		return (R * Y.RED) + (G * Y.GREEN) + (B * Y.BLUE)
+		return (R * BT709.Y.RED) + (G * BT709.Y.GREEN) + (B * BT709.Y.BLUE)
 	end
 end
 
@@ -297,7 +287,7 @@ local function GetRGBA(
 	A: number?
 ): (number, number, number, number, RGBAType)
 	if typeof(Value) == "number" and G and B and A then
-		return R, G, B, A, typeof(Value)
+		return Value, G, B, A, typeof(Value) :: any
 	elseif typeof(Value) == "buffer" then
 		-- ColorBuffers in Palette.Colors are 8 bytes
 		-- so allowing it to be greater than 4 is so someone could
@@ -307,39 +297,35 @@ local function GetRGBA(
 				buffer.readu8(Value, 1),
 				buffer.readu8(Value, 2),
 				buffer.readu8(Value, 3),
-				typeof(Value)
+				typeof(Value) :: any
 		elseif buffer.len(Value) == 3 then
 			return buffer.readu8(Value, 0), 
 				buffer.readu8(Value, 1),
 				buffer.readu8(Value, 2), 
 				0,
-				typeof(Value)
+				typeof(Value) :: any
 		else
 			error("[Quack] buffer provided does not have length of either 3 or 4++")
 		end
 	elseif typeof(Value) == "Color3" then
-		return math.clamp(math.ceil(Color3.R * 255), 0, 255),
-			math.clamp(math.ceil(Color3.G * 255), 0, 255),
-			math.clamp(math.ceil(Color3.B * 255), 0, 255),
+		return math.clamp(math.ceil(Value.R * 255), 0, 255),
+			math.clamp(math.ceil(Value.G * 255), 0, 255),
+			math.clamp(math.ceil(Value.B * 255), 0, 255),
 			0,
-			typeof(Value)
+			typeof(Value) :: any
 	elseif typeof(Value) == "table" then
 		if #Value >= 3 then
 			return Value[1],
 				Value[2],
 				Value[3],
 				Value[4] or 0,
-				typeof(Value)
+				typeof(Value) :: any
 		else
 			error("[Quack] Table is not of valid lengths 3 or 4")
 		end
 	else
 		error("[Quack] Value is not of types that represent an RGB or RGBA value:\n\t3 or 4 long array, Color3, 3 or 4 long tuple made up of numbers, or a 3 or 4++ long buffer with the first 3 or 4 bytes as u8s")
 	end
-end
-
-local function IsArray<T, K, V>(Tbl: T & {[K]: V}): (T & {[number]: V})?
-	return if Tbl[1] then Tbl :: any else nil
 end
 
 local function GetClassLength<T>(self: T & {Size: number})
@@ -402,6 +388,28 @@ end
 -- Image Data
 --------------------------------------------------------------------------------
 
+local function SetPixelInImage<T>(ImageData: ImageData<T>, Index: number, R: number, G: number, B: number, A: number)
+	if typeof(ImageData.Pixels) == "table" then
+		if Index < 1 then return end
+		local NewIndex = if Index > 1 then Index * 4 else 1
+
+		ImageData.Pixels[NewIndex] = R
+		ImageData.Pixels[NewIndex + 1] = G
+		ImageData.Pixels[NewIndex + 2] = B
+		ImageData.Pixels[NewIndex + 3] = A or 0
+	else
+		if Index < 0 then return end
+		local NewIndex = if Index > 1 then Index * 4 else 0
+
+		if NewIndex + 4 <= buffer.len(ImageData.Pixels :: any) then
+			buffer.writeu8(ImageData.Pixels :: any, NewIndex, R)
+			buffer.writeu8(ImageData.Pixels :: any, NewIndex + 1, G)
+			buffer.writeu8(ImageData.Pixels :: any, NewIndex + 2, B)
+			buffer.writeu8(ImageData.Pixels :: any, NewIndex + 3, A)
+		end
+	end
+end
+
 local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, number?, number?, number?)
 	if typeof(self.Pixels) == "table" then
 		if Index < 1 then
@@ -409,18 +417,18 @@ local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, n
 		end
 		local NewIndex = if Index > 1 then Index * 4 else 1
 
-		return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
-			self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
+		return self.Pixels[NewIndex] :: any, self.Pixels[NewIndex + 1] :: any,
+			self.Pixels[NewIndex + 2] :: any, self.Pixels[NewIndex + 3] :: any
 	else
 		if Index < 0 then
 			return nil, nil, nil, nil
 		end
 		local NewIndex = if Index > 1 then Index * 4 else 0
 
-		if NewIndex > buffer.len(self.Pixels) then
+		if NewIndex > buffer.len(self.Pixels :: any) then
 			return nil, nil, nil, nil
 		else
-			return BufferReadRGBA(self.Pixels, Index)
+			return BufferReadRGBA(self.Pixels :: any, Index)
 		end
 	end
 end
@@ -442,7 +450,7 @@ local function ImageData_Iter<T>(self: ImageData<T>)
 				self.Pixels[Index + 2], self.Pixels[Index + 3]
 		end
 	else
-		local Length = buffer.len(self.Pixels)
+		local Length = buffer.len(self.Pixels :: any)
 		local Index = 0
 
 		return function()
@@ -453,7 +461,7 @@ local function ImageData_Iter<T>(self: ImageData<T>)
 			end
 
 			-- Index, R, G, B, A
-			return Index, BufferReadRGBA(self.Pixels, Index)
+			return Index, BufferReadRGBA(self.Pixels :: any, Index)
 		end
 	end
 end
@@ -466,27 +474,7 @@ local function ImageData_Set<T>(
 	B: number,
 	A: number?
 )
-	local R, G, B, A = GetRGBA(Value, G, B, A)
-
-	if typeof(self.Pixels) == "table" then
-		if Index < 1 then return end
-		local NewIndex = if Index > 1 then Index * 4 else 1
-
-		self.Pixels[NewIndex] = R
-		self.Pixels[NewIndex + 1] = G
-		self.Pixels[NewIndex + 2] = B
-		self.Pixels[NewIndex + 3] = A or 0
-	else
-		if Index < 0 then return end
-		local NewIndex = if Index > 1 then Index * 4 else 0
-
-		if NewIndex + 4 <= buffer.len(self.Pixels) then
-			buffer.writeu8(self.Pixels, NewIndex, R)
-			buffer.writeu8(self.Pixels, NewIndex + 1, G)
-			buffer.writeu8(self.Pixels, NewIndex + 2, B)
-			buffer.writeu8(self.Pixels, NewIndex + 3, A)
-		end
-	end
+	SetPixelInImage(self, Index, GetRGBA(Value, G, B, A))
 end
 
 local ImageDataPrototype = {
@@ -500,11 +488,11 @@ ImageDataPrototype.__index = ImageDataPrototype
 
 local function CreateImageData(Data: EditableImage | {number} | buffer, Width: number?, Height: number?, CopyPixels: boolean?)
 	if typeof(Data) == "Instance" then
-		return setmetatable({
+		return (setmetatable({
 			Pixels = Data:ReadPixels(Vector2.new(), Data.Size),
 			Height = Data.Size.Y,
 			Width = Data.Size.X,
-		}, ImageDataPrototype)
+		}, ImageDataPrototype) :: any) :: ImageData<{number}>
 	else
 		local Length = if typeof(Data) == "table" then #Data else buffer.len(Data)
 
@@ -519,18 +507,18 @@ local function CreateImageData(Data: EditableImage | {number} | buffer, Width: n
 		if CopyPixels then
 			if typeof(Data) == "buffer" then
 				Pixels = buffer.create(Length)
-				buffer.copy(Pixels, 0, Data)
+				buffer.copy(Pixels :: any, 0, Data)
 			else
 				Pixels = table.clone(Data)
 			end
 		end
 
-		return setmetatable({
+		return (setmetatable({
 			Size = Length / 4,
 			Pixels = Pixels,
 			Height = Height,
 			Width = Width,
-		}, ImageDataPrototype)
+		}, ImageDataPrototype) :: any) :: ImageData<buffer | {number}>
 	end
 end
 
@@ -552,7 +540,7 @@ end
 -- {@link http://stackoverflow.com/questions/4754506/color-similarity-distance-in-rgba-color-space/8796867#8796867}
 -- {@link https://github.com/pornel/pngquant/blob/cc39b47799a7ff2ef17b529f9415ff6e6b213b8f/lib/pam.h#L148}
 local function CalcuateRaw_PNGQuant(
-    self: DistanceCalcuator,
+    self: DistanceCalculator,
     R1: number,
     G1: number,
     B1: number,
@@ -583,12 +571,12 @@ local function CalcuateRaw_PNGQuant(
         R1 * self.WhitepointR,
         R2 * self.WhitepointR,
         Alphas
-    ) +
-    GetColorDiffrenceChannel(
-        G1 * self.WhitepointG,
-        G2 * self.WhitepointG,
-        Alphas
-    ) +
+    ) + 
+	GetColorDiffrenceChannel(
+		G1 * self.WhitepointG,
+		G2 * self.WhitepointG,
+		Alphas
+	) +
     GetColorDiffrenceChannel(
         B1 * self.WhitepointB,
         B2 * self.WhitepointB,
@@ -598,7 +586,7 @@ end
 
 -- Manhattan distance (NeuQuant modification) - w/o sRGB coefficients
 local function CalcuateRaw_Manhattan(
-    self: DistanceCalcuator,
+    self: DistanceCalculator,
     R1: number,
     G1: number,
     B1: number,
@@ -617,12 +605,12 @@ local function CalcuateRaw_Manhattan(
     if dB < 0 then dB = 0 - dB end
     if dA < 0 then dA = 0 - dA end
 
-    return (self.Defaults.KR * dR) + (self.Defaults.KG * dG) + 
-        (self.Defaults.KB * dB) + (self.Defaults.KA * dA)
+    return (self.Defualts.KR * dR) + (self.Defualts.KG * dG) + 
+        (self.Defualts.KB * dB) + (self.Defualts.KA * dA)
 end
 
 local function CalcuateRaw_Euclidean(
-    self: DistanceCalcuator,
+    self: DistanceCalculator,
     R1: number,
     G1: number,
     B1: number,
@@ -637,15 +625,15 @@ local function CalcuateRaw_Euclidean(
     local dB = B2 - B1;
     local dA = A2 - A1;
     return math.sqrt(
-        ((self.Defaults.KR * dR) * dR) +
-        ((self.Defaults.KG * dG) * dG) +
-        ((self.Defaults.KB * dB) * dB) +
-        ((self.Defaults.KA * dA) * dA)
+        ((self.Defualts.KR * dR) * dR) +
+        ((self.Defualts.KG * dG) * dG) +
+        ((self.Defualts.KB * dB) * dB) +
+        ((self.Defualts.KA * dA) * dA)
     )
 end
 
 local function CalcuateRaw_CMetric(
-    self: DistanceCalcuator,
+    self: DistanceCalculator,
     R1: number,
     G1: number,
     B1: number,
@@ -734,11 +722,8 @@ local Calcuators: {
     },
 }
 
-local CalcuatorPrototype = {}
-CalcuatorPrototype.__index = CalcuatorPrototype
-
 local function Calcuator_CalcuateNormalized(
-    self: DistanceCalcuator,
+    self: DistanceCalculator,
     R1: number,
     G1: number,
     B1: number,
@@ -772,16 +757,16 @@ local function CreateCalcuator(
 	local B = B or 255
 	local A = A or 255
 
-    local self = setmetatable({
+    local self: DistanceCalculator = setmetatable({
         WhitepointR = if R > 0 then 255 / R else 0,
         WhitepointG = if G > 0 then 255 / G else 0,
         WhitepointB = if B > 0 then 255 / B else 0,
         WhitepointA = if A > 0 then 255 / A else 0,
-        CalculateRaw = Calcuator.CalculateRaw,
+        CalculateRaw = Calcuator.CalcuateRaw,
         Defualts = Calcuator.Defualts
-    }, CalcuatorPrototype)
-    self.MaxDistance = self:CalcuateRaw(R, G, B, A, 0, 0, 0, 0)
-    return self :: DistanceCalcuator
+    }, CalcuatorPrototype) :: any
+    self.MaxDistance = self:CalculateRaw(R, G, B, A, 0, 0, 0, 0)
+    return self
 end
 
 --------------------------------------------------------------------------------
@@ -810,7 +795,7 @@ local function GetNearestIndex(
 	local ClosestB = 0
 	local ClosestA = 0
 
-	for _, ColorBuffer in self.Colors do
+	for Index, ColorBuffer in Palette.Colors do
 		local IndexR, IndexG, IndexB, IndexA = BufferReadRGBA(ColorBuffer)
 		local Distance = Palette.Calculator:CalculateRaw(
 			R, G, B, A, IndexR, IndexG, IndexB, IndexA
@@ -851,7 +836,7 @@ local function Palette_Remove(self: Palette, ValueOrIndex: any, G: number?, B: n
 		local ColorBuffer = table.remove(self.Colors, Index)
 
 		if ColorBuffer then
-			self.Colors -= 1
+			self.Size -= 1
 		end
 	end
 end
@@ -878,7 +863,7 @@ local function Palette_Peek(self: Palette, Index: number?): (number?, number?, n
 end
 
 local function Palette_Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
+	local NewR, NewG, NewB, NewA, RGBAType: any = GetRGBA(Value, G, B, A)
 	return FormatRGBA(RGBAType, GetNearestColor(self, NewR, NewG, NewB, NewA))
 end
 
@@ -915,8 +900,8 @@ local function Palette_Sort(self: Palette)
 	table.sort(self.Colors, function(A, B)
 		local AR, AG, AB, AA = BufferReadRGBA(A)
 		local BR, BG, BB, BA = BufferReadRGBA(B)
-		local AH, AS, AL = RGBToHSL(AR, AG, AB)
-		local BH, BS, BL = RGBToHSL(BR, BG, BB)
+		local AH, AS = RGBToHSL(AR, AG, AB)
+		local BH, BS = RGBToHSL(BR, BG, BB)
 	
 		-- sort all grays + whites together
 		local HueA = if AR == AG and AG == AB then 0 else 1 + HueGroup(AH, HueGroups)
@@ -1059,7 +1044,6 @@ local ErrorDiffusionArrays: {[DitheringMethod]: {{number}}} = {
 
 local HilbertRight = 3
 local HilbertDown = 4
-local HilbertNone = 0
 local HilbertLeft = 2
 local HilbertUp = 1
 
@@ -1089,8 +1073,8 @@ end
 -- fixed version. it doesn't use image pixels as error storage, also it doesn't have 0.3 + 0.3 + 0.3 + 0.3 = 0 error
 -- Mutates ImageData
 local function Dither_ErrorDiffusionArray(
-	Calcuator: DistanceCalcuator,
-	ImageData: ImageData,
+	Calcuator: DistanceCalculator,
+	ImageData: ImageData<{number} | buffer>,
 	Palette: Palette,
 	DitheringMethod: DitheringMethod,
 	Serpentine: boolean?,
@@ -1105,10 +1089,6 @@ local function Dither_ErrorDiffusionArray(
 	local Height = ImageData.Height
 	local Width = ImageData.Width
 	local MaxErrorLines = 1
-	local OriginalR
-	local OriginalG
-	local OriginalB
-	local OriginalA
 
 	for _, Kernel in Kernels do
 		local KernelErrorLines = Kernel[3] + 1
@@ -1144,8 +1124,7 @@ local function Dither_ErrorDiffusionArray(
 
 		for X = XStart, XEnd, Dir do
 			-- Image pixel
-			local ColorBuffer = ImageData.Pixels[Index]
-			local R, G, B, A = BufferReadRGBA(ColorBuffer)
+			local R, G, B, A = ImageData:Peek(Index)
 			local Error = ErrorLine[X]
 
 			local CorrectedR = math.clamp(R + Error[1], 0, 255)
@@ -1158,9 +1137,7 @@ local function Dither_ErrorDiffusionArray(
 				Palette, CorrectedR, CorrectedG, CorrectedB, CorrectedA
 			)
 
-			ImageData.Pixels[Index] = WriteOrCreateColorBuffer(
-				PaletteR, PaletteG, PaletteB, PaletteA, ColorBuffer
-			)
+			SetPixelInImage(ImageData, Index, PaletteR, PaletteG, PaletteB, PaletteA)
 
 			-- dithering strength
 			if MinimumColorDistanceToDither then 
@@ -1181,10 +1158,10 @@ local function Dither_ErrorDiffusionArray(
 				EB = CorrectedB - PaletteB
 				EA = CorrectedA - PaletteA
 			else
-				ER = OriginalR - PaletteR
-				EG = OriginalG - PaletteG
-				EB = OriginalB - PaletteB
-				EA = OriginalA - PaletteA
+				ER = R - PaletteR
+				EG = G - PaletteG
+				EB = B - PaletteB
+				EA = A - PaletteA
 			end
 
 			local DStart = if Dir == 1 then 0 else #Kernels
@@ -1270,14 +1247,14 @@ local HilbertCurvePrototype = {
 			self:Walk(HilbertLeft)
 		end
 		self.Level += 1
-	end
+	end,
 	Visit = HilbertCurve_Visit,
 }
 HilbertCurvePrototype.__index = HilbertCurvePrototype
 
 local function Dither_ErrorDiffusionRiemersma(
-	DistanceCalcuator: DistanceCalcuator,
-	ImageData: ImageData,
+	DistanceCalcuator: DistanceCalculator,
+	ImageData: ImageData<any>,
 	Palette: Palette,
 	ErrorPropagation: number?,
 	ErrorQueueSize: number?
@@ -1300,10 +1277,9 @@ local function Dither_ErrorDiffusionRiemersma(
 	end
 
 	local HilbertCurve: HilbertCurve = setmetatable({
-		Callback = function(X, Y)
+		Callback = function(X: number, Y: number)
 			local PixelIndex = (X + Y) * Width
-			local ColorBuffer = ImageData.Pixels[PixelIndex]
-			local R, G, B, A = BufferReadRGBA(ColorBuffer)
+			local R, G, B, A = ImageData:Peek(PixelIndex)
 	
 			for Index, Weight in Weights do
 				local Error = ErrorQueue[(Index + Head) % ErrorQueueSize]
@@ -1331,9 +1307,7 @@ local function Dither_ErrorDiffusionRiemersma(
 		
 			-- update point
 			--p.from(quantizedPoint);
-			ImageData.Pixels[PixelIndex] = WriteOrCreateColorBuffer(
-				QuantizedR, QuantizedG, QuantizedB, QuantizedA, ColorBuffer
-			)
+			SetPixelInImage(ImageData, PixelIndex, QuantizedR, QuantizedG, QuantizedB, QuantizedA)
 		end,
 
 		Level = math.floor(math.log(math.max(Width, Height)) / math.log(2) + 1),
@@ -1349,21 +1323,15 @@ end
 
 -- PointContainer is replaced w image data, a simple struct
 local function Dither_NearestColor(
-	DistanceCalcuator: DistanceCalcuator,
-	ImageData: ImageData,
+	DistanceCalcuator: DistanceCalculator,
+	ImageData: ImageData<any>,
 	Palette: Palette
 )
 	for Y = 1, ImageData.Height do
 		local Index = Y * ImageData.Width
 
 		for X = 1, ImageData.Width do
-			-- Image pixel
-			local ColorBuffer = ImageData.Pixels[Index]
-
-			-- Reduced pixel
-			ImageData.Pixels[Index] = WriteOrCreateColorBuffer(
-				GetNearestColor(Palette, BufferReadRGBA(ColorBuffer)), ColorBuffer
-			)
+			SetPixelInImage(ImageData, Index, GetNearestColor(Palette, ImageData:Peek(Index)))
 			Index += 1
 		end
 	end
@@ -1397,7 +1365,6 @@ local function CheckHueStatistics(HueStatistics: HueStatistics, Uint32: number)
 			0
 		else
 			1 + HueGroup(H, HueStatistics.GroupAmount)
-	local Min = HueStatistics.MinColors
 	local GR = HueStatistics.Stats[HG]
 
 	GR.Amount += 1
@@ -1448,10 +1415,6 @@ end
  *
  * colorHistogram.ts - part of Image Quantization Library
  --]]
-
-local DefualtBoxSizeX = 64
-local DefualtBoxSizeY = 64
-local DefualtBoxPixels = 2
  
 local function GetImportanceSortedColorsUint32(
 	Histogram: {number},
@@ -1484,10 +1447,8 @@ local function GetImportanceSortedColorsUint32(
 	
 		-- add any cut off colors with same freq as last
 		local Position = InitialColorsLimit
-		let pos = initialColorsLimit;
-		const len = sorted.length;
 
-		while Position < #Keys and Histogram[Sorted[Position]] == Freq do
+		while Position < #Keys and Histogram[Keys[Position]] == Freq do
 			Position += 1
 			table.insert(Uint32Indexs, Keys[Position])
 		end
@@ -1512,19 +1473,17 @@ end
 
 -- partitions a rectangle of width x height into an array of boxes stepX x stepY (or less)
 local function MakeBoxes(Width: number, Height: number, StepX: number, StepY: number)
-	local wrem = width % stepX
-	local hrem = height % stepY
-	local xend = width - wrem
-	local yend = height - hrem
+	local wrem = Width % StepX
+	local hrem = Height % StepY
+	local xend = Width - wrem
+	local yend = Height - hrem
 	local Boxes = table.create(Height * Width)
 
-	local BoxHeight = BoundingBox[4]
-	local BoxWidth = BoundingBox[3]
 	for Y = 0, Height, StepY do
 		for X = 0, Width, StepX do
 			local Box = table.create(4)
 			Box[1] = X
-			Box[2] = y
+			Box[2] = Y
 			Box[3] = if X == xend then wrem else StepX
 			Box[4] = if Y == yend then hrem else StepY
 			Boxes[#Boxes + 1] = Box
@@ -1537,7 +1496,7 @@ end
 -- FIXME: this can over-reduce (few/no colors same?), need a way to keep
 -- important colors that dont ever reach local thresholds (gradients?)
 local function ColorStats2D(
-	ImageData: ImageData,
+	ImageData: ImageData<any>,
 	Histogram: {number},
 	HueStats: HueStatistics,
 	BoxPixels: number,
@@ -1587,7 +1546,7 @@ local function ColorStats2D(
 	end
 
 	-- inject min huegroup colors
-	for Index, Stat in HueStats do
+	for Index, Stat in HueStats.Stats do
 		if Stat.Amount <= HueStats.MinColors then
 			for _, ColorUint32 in Stat.Colors do
 				if not Histogram[ColorUint32] then
@@ -1601,7 +1560,7 @@ local function ColorStats2D(
 end
 
 -- global top-population
-local function ColorStats1D(ImageData: ImageData, Histogram: {number}, HueStats: HueStatistics)
+local function ColorStats1D(ImageData: ImageData<any>, Histogram: {number}, HueStats: HueStatistics)
 	for _, R, G, B, A in ImageData do
 		local Uint32 = RGBAToUint32(R, G, B, A)
 
@@ -1621,11 +1580,10 @@ end
 
 local DefualtDistanceIncrement = 0.005
 local DefualtInitalDistance = 0.01
-local HueGroups = 10
 
 local function BuildPalette(
-	ImageOrImages: ImageData | {ImageData},
-	Calculator: DistanceCalcuator,
+	ImageOrImages: ImageData<any> | {ImageData<any>},
+	Calculator: DistanceCalculator,
 	Method: Method,
 	MaxColors: number,
 	DistanceIncrement: number?,
@@ -1651,24 +1609,24 @@ local function BuildPalette(
 		local BoxWidth = 64
 		local BoxPixels = 2
 
-		if IsArray(ImagesOrImages) then
-			for _, ImageData in ImagesOrImages then
+		if (ImageOrImages :: any)[1] then
+			for _, ImageData in (ImageOrImages :: any)[1] do
 				ColorStats2D(
 					ImageData, Histogram, HueStats, BoxPixels, BoxWidth, BoxHeight
 				)
 			end
 		else
 			ColorStats2D(
-				ImagesOrImages, Histogram, HueStats, BoxPixels, BoxWidth, BoxHeight
+				ImageOrImages :: any, Histogram, HueStats, BoxPixels, BoxWidth, BoxHeight
 			)
 		end
 	else
-		if IsArray(ImagesOrImages) then
-			for _, ImageData in ImagesOrImages then
+		if (ImageOrImages :: any)[1] then
+			for _, ImageData in (ImageOrImages :: any)[1] do
 				ColorStats1D(ImageData, Histogram, HueStats)
 			end
 		else
-			ColorStats1D(ImagesOrImages, Histogram, HueStats)
+			ColorStats1D(ImageOrImages :: any, Histogram, HueStats)
 		end
 	end
   
@@ -1712,7 +1670,7 @@ local function BuildPalette(
 				if Distance < THold then
 					local RemovedColor = table.create(3)
 					RemovedColor[1] = Index2
-					RemovedColor[2] = Buffer2
+					RemovedColor[2] = Buffer2 :: any
 					RemovedColor[3] = Distance
 
 					MemDist[#MemDist + 1] = RemovedColor
@@ -1785,30 +1743,28 @@ end
 -- Exports
 --------------------------------------------------------------------------------
 
-local function GetImageDatasFromImageOrImages(ImageOrImages: ImageOrImages)
-	if IsArray(ImagesOrImages) then
-		if typeof(ImagesOrImages[1]) == "Instance" then
-			for Index, EditableImage in ImagesOrImages do
-				ImagesOrImages[Index] = CreateImageData(EditableImage)
+local function GetImageDatasFromImageOrImages(ImageOrImages: ImageOrImages<any>): {ImageData<any>} | ImageData<any>
+	if typeof((ImageOrImages :: any)[1]) == "Instance" then
+			for Index, EditableImage in ImageOrImages :: {EditableImage} do
+				(ImageOrImages :: any)[Index] = CreateImageData(EditableImage)
 			end
-		end
 	elseif typeof(ImageOrImages) == "Instance" then
-		return CreateImageData(ImagesOrImages)
+		return CreateImageData(ImageOrImages)
 	end
-	return ImageOrImages
+	return ImageOrImages :: any
 end
 
 local function Dither(
 	DitheringMethod: DitheringMethod,
-	ImageOrImages: ImageOrImages,
+	ImageOrImages: ImageOrImages<any>,
 	Palette: Palette, 
 	Info: DitheringInfo
 )
 	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
 
-	if IsArray(ImageOrImages) then
+	if (ImageOrImages :: any)[1] then
 		if DitheringMethod == "ErrorDiffusionRiemersma" then
-			for _, ImageData in ImageOrImages do
+			for _, ImageData in ImageOrImages :: {ImageData<any>} do
 				Dither_ErrorDiffusionRiemersma(
 					Palette.Calculator,
 					ImageData,
@@ -1818,11 +1774,11 @@ local function Dither(
 				)
 			end
 		elseif DitheringMethod == "NearestColor" then
-			for _, ImageData in ImageOrImages do
+			for _, ImageData in ImageOrImages :: {ImageData<any>} do
 				Dither_NearestColor(Palette.Calculator, ImageData, Palette)
 			end
 		else
-			for _, ImageData in ImageOrImages do
+			for _, ImageData in ImageOrImages :: {ImageData<any>} do
 				Dither_ErrorDiffusionArray(
 					Palette.Calculator,
 					ImageData,
@@ -1838,17 +1794,17 @@ local function Dither(
 		if DitheringMethod == "ErrorDiffusionRiemersma" then
 			Dither_ErrorDiffusionRiemersma(
 				Palette.Calculator,
-				ImageOrImages,
+				ImageOrImages :: any,
 				Palette,
 				Info.ErrorPropagation,
 				Info.ErrorQueueSize
 			)
 		elseif DitheringMethod == "NearestColor" then
-			Dither_NearestColor(Palette.Calculator, ImageOrImages, Palette)
+			Dither_NearestColor(Palette.Calculator, ImageOrImages :: any, Palette)
 		else
 			Dither_ErrorDiffusionArray(
 				Palette.Calculator,
-				ImageOrImages,
+				ImageOrImages :: any,
 				Palette,
 				DitheringMethod,
 				Info.Serpentine,
@@ -1860,7 +1816,7 @@ local function Dither(
 	return ImageOrImages
 end
 
-local function Palletize(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
+local function Palletize(ImageOrImages: ImageOrImages<any>, Info: PalletizeInfo)
 	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
 	local Calculator = CreateCalcuator(
 		Info.DistanceFormula or "ManhattanBT709", Info.R, Info.G, Info.B, Info.A
@@ -1872,7 +1828,7 @@ local function Palletize(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
 	)
 end
 
-local function Quantize(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
+local function Quantize(ImageOrImages: ImageOrImages<any>, Info: QuantizeInfo)
 	local ImageOrImages = GetImageDatasFromImageOrImages(ImageOrImages)
 	local Calculator = CreateCalcuator(
 		Info.DistanceFormula or "ManhattanBT709", Info.R, Info.G, Info.B, Info.A
@@ -1891,17 +1847,17 @@ local function Quantize(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
 	)
 end
 
-local function PalletizeAsync(ImageOrImages: ImageOrImages, Info: PalletizeInfo)
+local function PalletizeAsync(ImageOrImages: ImageOrImages<any>, Info: PalletizeInfo)
 	return Future.Try(Palletize, ImageOrImages, Info)
 end
 
-local function QuantizeAsync(ImageOrImages: ImageOrImages, Info: QuantizeInfo)
+local function QuantizeAsync(ImageOrImages: ImageOrImages<any>, Info: QuantizeInfo)
 	return Future.Try(Quantize, ImageOrImages, Info)
 end
 
 local function DitherAsync(
 	DitheringMethod: DitheringMethod,
-	ImageOrImages: ImageOrImages,
+	ImageOrImages: ImageOrImages<any>,
 	Palette: Palette, 
 	Info: DitheringInfo
 )
@@ -1909,55 +1865,55 @@ local function DitherAsync(
 end
 
 local Exports = table.freeze({
-	DitherAsync = DitherAsync :: ((DitheringMethod: "NearestColor", Image: ImageData | EditableImage, Palette: Palette) -> Future.Future<boolean, ImageData>) &
-		((DitheringMethod: "NearestColor", Images: {ImageData}, Palette: Palette) -> Future.Future<boolean, {ImageData}>) &
-		((DitheringMethod: "NearestColor", EditableImage: EditableImage, Palette: Palette) -> Future.Future<boolean, ImageData>) &,
-		((DitheringMethod: "NearestColor", EditableImages: {EditableImage}, Palette: Palette) -> Future.Future<boolean, {ImageData}>) &
-		((DitheringMethod: ArrayDitheringMethod, Image: ImageData | EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, ImageData>) &
-		((DitheringMethod: ArrayDitheringMethod, Images: {ImageData}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, {ImageData}>) &
-		((DitheringMethod: ArrayDitheringMethod, EditableImage: EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, ImageData>) &
-		((DitheringMethod: ArrayDitheringMethod, EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, {ImageData}>) &
-		((DitheringMethod: "ErrorDiffusionRiemersma", Image: ImageData | EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, ImageData>) &
-		((DitheringMethod: "ErrorDiffusionRiemersma", Images: {ImageData}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, {ImageData}>) &
-		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImage: EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, ImageData>) &
-		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, {ImageData}>),
+	DitherAsync = (DitherAsync :: any) :: (<T>(DitheringMethod: "NearestColor", Image: ImageData<T>, Palette: Palette) -> Future.Future<boolean, ImageData<T>>) &
+		(<T>(DitheringMethod: "NearestColor", Images: {ImageData<T>}, Palette: Palette) -> Future.Future<boolean, {ImageData<T>}>) &
+		((DitheringMethod: "NearestColor", EditableImage: EditableImage, Palette: Palette) -> Future.Future<boolean, ImageData<{number}>>) &
+		((DitheringMethod: "NearestColor", EditableImages: {EditableImage}, Palette: Palette) -> Future.Future<boolean, {ImageData<{number}>}>) &
+		(<T>(DitheringMethod: ArrayDitheringMethod, Image: ImageData<T>, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, ImageData<T>>) &
+		(<T>(DitheringMethod: ArrayDitheringMethod, Images: {ImageData<T>}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, {ImageData<T>}>) &
+		((DitheringMethod: ArrayDitheringMethod, EditableImage: EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, ImageData<{number}>>) &
+		((DitheringMethod: ArrayDitheringMethod, EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> Future.Future<boolean, {ImageData<{number}>}>) &
+		(<T>(DitheringMethod: "ErrorDiffusionRiemersma", Image: ImageData<T>, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, ImageData<T>>) &
+		(<T>(DitheringMethod: "ErrorDiffusionRiemersma", Images: {ImageData<T>}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, {ImageData<T>}>) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImage: EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, ImageData<{number}>>) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> Future.Future<boolean, {ImageData<{number}>}>),
 
-	Dither = Dither :: ((DitheringMethod: "NearestColor", Image: ImageData | EditableImage, Palette: Palette) -> ImageData) &
-		((DitheringMethod: "NearestColor", Images: {ImageData}, Palette: Palette) -> {ImageData}) &
-		((DitheringMethod: "NearestColor", EditableImage: EditableImage, Palette: Palette) -> ImageData) &,
-		((DitheringMethod: "NearestColor", EditableImages: {EditableImage}, Palette: Palette) -> {ImageData}) &
-		((DitheringMethod: ArrayDitheringMethod, Image: ImageData | EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> ImageData) &
-		((DitheringMethod: ArrayDitheringMethod, Images: {ImageData}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> {ImageData}) &
-		((DitheringMethod: ArrayDitheringMethod, EditableImage: EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> ImageData) &
-		((DitheringMethod: ArrayDitheringMethod, EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> {ImageData}) &
-		((DitheringMethod: "ErrorDiffusionRiemersma", Image: ImageData | EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> ImageData) &
-		((DitheringMethod: "ErrorDiffusionRiemersma", Images: {ImageData}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> {ImageData}) &
-		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImage: EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> ImageData) &
-		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> {ImageData}),	
+	Dither = (Dither :: any) :: (<T>(DitheringMethod: "NearestColor", Image: ImageData<T>, Palette: Palette) -> ImageData<T>) &
+		(<T>(DitheringMethod: "NearestColor", Images: {ImageData<T>}, Palette: Palette) -> {ImageData<T>}) &
+		((DitheringMethod: "NearestColor", EditableImage: EditableImage, Palette: Palette) -> ImageData<{number}>) &
+		((DitheringMethod: "NearestColor", EditableImages: {EditableImage}, Palette: Palette) -> {ImageData<{number}>}) &
+		(<T>(DitheringMethod: ArrayDitheringMethod, Image: ImageData<T>, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> ImageData<T>) &
+		(<T>(DitheringMethod: ArrayDitheringMethod, Images: {ImageData<T>}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> {ImageData<T>}) &
+		((DitheringMethod: ArrayDitheringMethod, EditableImage: EditableImage, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> ImageData<{number}>) &
+		((DitheringMethod: ArrayDitheringMethod, EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionArrayInfo: ErrorDiffusionArrayInfo) -> {ImageData<{number}>}) &
+		(<T>(DitheringMethod: "ErrorDiffusionRiemersma", Image: ImageData<T>, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> ImageData<T>) &
+		(<T>(DitheringMethod: "ErrorDiffusionRiemersma", Images: {ImageData<T>}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> {ImageData<T>}) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImage: EditableImage, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> ImageData<{number}>) &
+		((DitheringMethod: "ErrorDiffusionRiemersma", EditableImages: {EditableImage}, Palette: Palette, ErrorDiffusionRiemersmaInfo: ErrorDiffusionRiemersmaInfo) -> {ImageData<{number}>}),	
 
-	QuantizeAsync = QuantizeAsync :: ((Image: ImageData, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette, ImageData>) &
-		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette, {ImageData}>) &
-		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette, ImageData>) &
-		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette, {ImageData}>),
+	QuantizeAsync = (QuantizeAsync :: any) :: (<T>(Image: ImageData<T>, QuantizeInfo: QuantizeInfo?) -> Future.Future<boolean, Palette, ImageData<T>>) &
+		(<T>(Images: {ImageData<T>}, QuantizeInfo: QuantizeInfo?) -> Future.Future<boolean, Palette, {ImageData<T>}>) &
+		((EditableImage: EditableImage, QuantizeInfo: QuantizeInfo?) -> Future.Future<boolean, Palette, ImageData<{number}>>) &
+		((EditableImages: {EditableImage}, QuantizeInfo: QuantizeInfo?) -> Future.Future<boolean, Palette, {ImageData<{number}>}>),
 
-	ImageData = CreateImageData :: ((Pixels: {number}, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<{number}>) &
+	ImageData = (CreateImageData :: any) :: ((Pixels: {number}, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<{number}>) &
 		((Pixels: buffer, Width: number, Height: number, CopyPixels: boolean?) -> ImageData<buffer>) &
 		((EditableImage: EditableImage) -> ImageData<{number}>),
 
-	PalletizeAsync = PalletizeAsync :: ((Image: ImageData, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette>) &
-		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette>) &
-		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette>) &
-		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> Future.Future<boolean, Palette>),
+	PalletizeAsync = (PalletizeAsync :: any) :: (<T>(Image: ImageData<T>, PalletizeInfo: PalletizeInfo?) -> Future.Future<boolean, Palette>) &
+		(<T>(Images: {ImageData<T>}, PalletizeInfo: PalletizeInfo?) -> Future.Future<boolean, Palette>) &
+		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo?) -> Future.Future<boolean, Palette>) &
+		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo?) -> Future.Future<boolean, Palette>),
 
-	Quantize = Quantize:: ((Image: ImageData, PalletizeInfo: PalletizeInfo) -> (Palette, ImageData)) &
-		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> (Palette, {ImageData})) &
-		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> (Palette, ImageData)) &
-		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> (Palette, {ImageData})),
+	Quantize = (Quantize :: any) :: (<T>(Image: ImageData<T>, QuantizeInfo: QuantizeInfo?) -> (Palette, ImageData<T>)) &
+		(<T>(Images: {ImageData<T>}, QuantizeInfo: QuantizeInfo?) -> (Palette, {ImageData<T>})) &
+		((EditableImage: EditableImage, QuantizeInfo: QuantizeInfo?) -> (Palette, ImageData<{number}>)) &
+		((EditableImages: {EditableImage}, QuantizeInfo: QuantizeInfo?) -> (Palette, {ImageData<{number}>})),
 
-	Palettize = Palletize :: ((Image: ImageData, PalletizeInfo: PalletizeInfo) Palette) &
-		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> Palette) &
-		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> Palette) &
-		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> Palette),
+	Palettize = (Palletize :: any) :: (<T>(Image: ImageData<T>, PalletizeInfo: PalletizeInfo?) -> Palette) &
+		(<T>(Images: {ImageData<T>}, PalletizeInfo: PalletizeInfo?) -> Palette) &
+		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo?) -> Palette) &
+		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo?) -> Palette),
 
 	Palette = CreatePalette,
 })
