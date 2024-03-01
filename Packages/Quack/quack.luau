@@ -8,6 +8,8 @@
 -- @Kalrnlo
 -- 27/02/2024
 
+local ColorDistance = require(script.Parent.ColorDistance)
+local ImageData = require(script.Parent.ImageData)
 local Future = require(script.Parent.Future)
 
 export type DitheringMethod = ArrayDitheringMethod | "ErrorDiffusionRiemersma" | "NearestColor"
@@ -88,49 +90,18 @@ type DistanceFormulaDefaults = {
     KA: number,   
 }
 
-type ImageDataPrototype<T> = {
-	Set: ((self: ImageData<T>, Index: number, R: number, G: number, B: number, A: number?) -> ()) &
-		((self: ImageData<T>, Index: number,  Color3: Color3) -> ()) &
-		((self: ImageData<T>, Index: number, RGBOrRGBA: {number}) -> ()) &
-		((self: ImageData<T>, Index: number, RGBOrRGBA: buffer) -> ()),
-	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
-	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
-	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
-	__len: (self: ImageData<T>) -> number,
-}
-
 type PalettePrototype = {
-	Nearest: ((self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
-		((self: Palette, Color3: Color3) -> (Color3, number)) &
-		((self: Palette, RGBOrRGBA: {number}) -> {number}) &
-		((self: Palette, RGBOrRGBA: buffer) -> buffer),
-	Contains: ((self: Palette, R: number, G: number, B: number, A: number?) -> boolean) &
-		((self: Palette, Color3: Color3) -> boolean) &
-		((self: Palette, RGBOrRGBA: {number}) -> boolean) &
-		((self: Palette, RGBOrRGBA: buffer) -> boolean),
+	Nearest: (self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number),
+	Contains: (self: Palette, R: number, G: number, B: number, A: number?) -> boolean,
 	Remove: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
-		((self: Palette, Color3: Color3) -> ()) &
-		((self: Palette, RGBOrRGBA: {number}) -> ()) &
-		((self: Palette, RGBOrRGBA: buffer) -> ()) &
 		((self: Palette, Index: number) -> ()),
-	Add: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
-		((self: Palette, Color3: Color3) -> ()) &
-		((self: Palette, RGBOrRGBA: {number}) -> ()) &
-		((self: Palette, RGBOrRGBA: buffer) -> ()),
+	__iter: (self: Palette) -> () -> (number, number, number, number, number),
+	Add: (self: Palette, R: number, G: number, B: number, A: number?) -> (),
 	Peek: (self: Palette, Index: number) -> (number, number, number, number),
 	Iter: (self: Palette) -> () -> (number, number, number, number, number),
-	Sort: (self: Palette) -> (),
-	
-	__iter: (self: Palette) -> () -> (number, number, number, number, number),
 	__len: (self: Palette) -> number,
+	Sort: (self: Palette) -> (),
 }
-
-export type ImageData<T> = typeof(setmetatable({} :: {
-	Pixels: T & ({number} | buffer),
-	Height: number,
-	Width: number,
-	Size: number,
-}, {} :: ImageDataPrototype<T>))
 
 export type Palette = typeof(setmetatable({} :: {
 	Calcuator: DistanceCalcuator,

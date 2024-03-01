@@ -155,6 +155,12 @@ type DistanceCalcuator = {
 	CalcuateNormalized: CalcuatorFunction,
     Defualts: DistanceFormulaDefaults,
     CalculateRaw: CalcuatorFunction,
+	Whitepoint: {
+		R: number,
+		G: number,
+		B: number,
+		A: number,
+	}
     WhitepointR: number,
     WhitepointG: number,
     WhitepointB: number,
