@@ -7,9 +7,13 @@
 -- @kalrnlo
 -- 04/03/2024
 
-local u32ConversionHex = 0xFFFFFFFF
 -- LAB f(t) constant
+local u32ConversionHex = 0xFFFFFFFF
 local LAB_FT = math.pow(6 / 29, 3)
+
+local function ClampRGB(N: number)
+	return math.clamp(bit32.band(N, u32ConversionHex), 0, 255)
+end
 
 local function RGB_HSL(R: number, G: number, B: number)
 	local R = R / 255
@@ -30,6 +34,7 @@ local function RGB_HSL(R: number, G: number, B: number)
             0
 	) * 60, 360)
 
+	local L = (Min + Max) / 2
     local S = (
 		if Max == Min then
 		    0
@@ -39,8 +44,7 @@ local function RGB_HSL(R: number, G: number, B: number)
             Delta / ((2 - Max) - Min)
 	)
 
-	return if H < 0 then H + 360 else H, S * 100, 
-		((Min + Max) / 2) * 100
+	return if H < 0 then H + 360 else H, S * 100, L * 100
 end
 
 local function RGB_HSV(R: number, G: number, B: number)
@@ -129,7 +133,7 @@ local function HSL_RGB_Helper(Index: number, T1: number, T2: number, H: number)
 		T3 -= 1
 	end
 
-	return (	
+	return ClampRGB((	
 		if (6 * T3 < 1) then
 			((T1 + (T2 - T1)) * 6) * T3
 		elseif (2 * T3 < 1) then
@@ -138,7 +142,7 @@ local function HSL_RGB_Helper(Index: number, T1: number, T2: number, H: number)
 			((T1 + (T2 - T1)) * ((2 / 3) - T3)) * 6
 		else 
 			T1
-	) * 255
+	) * 255)
 end
 
 local function HSL_RGB(H: number, S: number, L: number)
@@ -182,29 +186,29 @@ local function HSV_RGB(H: number, S: number, V: number)
 	local NewV = V * 255
 
 	if HI == 0 then
-		return NewV,
-			NewV * (1 - (S * (1 - F))),
-			P
+		return ClampRGB(NewV),
+			ClampRGB(NewV * (1 - (S * (1 - F)))),
+			ClampRGB(P)
 	elseif HI == 1 then
-		return NewV * (1 - (S * F)),
-			NewV,
-			P
+		return ClampRGB(NewV * (1 - (S * F))),
+			ClampRGB(NewV),
+			ClampRGB(P)
 	elseif HI == 2 then
-		return P,
-			V,
-			NewV * (1 - (S * (1 - F)))
+		return ClampRGB(P),
+			ClampRGB(V),
+			ClampRGB(NewV * (1 - (S * (1 - F))))
 	elseif HI == 3 then
-		return P,
-			NewV * (1 - (S * F)),
-			NewV
+		return ClampRGB(P),
+			ClampRGB(NewV * (1 - (S * F))),
+			ClampRGB(NewV)
 	elseif HI == 4 then
-		return NewV * (1 - (S * (1 - F))),
-			P,
-			NewV
+		return ClampRGB(NewV * (1 - (S * (1 - F)))),
+			ClampRGB(P),
+			ClampRGB(NewV)
 	elseif HI == 5 then
-		return NewV,
-			P,
-			NewV * (1 - (S * F))
+		return ClampRGB(NewV),
+			ClampRGB(P),
+			ClampRGB(NewV * (1 - (S * F)))
 	else
 		return 0, 0, 0
 	end
@@ -242,17 +246,17 @@ local function HWB_RGB(H: number, W: number, B: number)
     local N = (WH + F) * (V - WH) -- Linear interpolation
 
     if I == 0 then
-        return V * 255, N * 255, WH * 255
+        return ClampRGB(V * 255), ClampRGB(N * 255), ClampRGB(WH * 255)
     elseif I == 1 then
-        return N * 255, V * 255, WH * 255
+        return ClampRGB(N * 255), ClampRGB(V * 255), ClampRGB(WH * 255)
     elseif I == 2 then
-        return WH * 255, V * 255, N * 255
+        return ClampRGB(WH * 255), ClampRGB(V * 255), ClampRGB(N * 255)
     elseif I == 3 then
-        return WH * 255, N * 255, V * 255
+        return ClampRGB(WH * 255), ClampRGB(N * 255), ClampRGB(V * 255)
     elseif I == 4 then
-        return N * 255, WH * 255, V * 255
+        return ClampRGB(N * 255), ClampRGB(WH * 255), ClampRGB(V * 255)
     elseif I == 5 then
-        return V * 255, WH * 255, N * 255
+        return ClampRGB(V * 255), ClampRGB(WH * 255), ClampRGB(N * 255)
     else
         return 0, 0, 0
     end
@@ -266,9 +270,9 @@ local function CMYK_RGB(C: number, M: number, Y: number, K: number)
 
     local Multiplier = 1 - K
 
-    return (1 - math.min(1, (C * Multiplier) + K)) * 255,
-        (1 - math.min(1, (M * Multiplier) + K)) * 255,
-        (1 - math.min(1, (Y * Multiplier) + K)) * 255
+    return ClampRGB((1 - math.min(1, (C * Multiplier) + K)) * 255),
+		ClampRGB((1 - math.min(1, (M * Multiplier) + K)) * 255),
+		ClampRGB((1 - math.min(1, (Y * Multiplier) + K)) * 255)
 end
 
 local XYZToRGBPower = 1.0 / 2.4
@@ -298,9 +302,9 @@ local function XYZ_RGB(X: number, Y: number, Z: number)
         else
             B * 12.92
 
-    return math.min(math.max(0, NewR), 1) * 255,
-        math.min(math.max(0, NewG), 1) * 255,
-        math.min(math.max(0, NewB), 1) * 255
+    return ClampRGB(math.clamp(NewR, 0, 1) * 255),
+		ClampRGB(math.clamp(NewG, 0, 1) * 255),
+        ClampRGB(math.clamp(NewB, 0, 1) * 255)
 end
 
 local XYZToLabIncrement = 16 / 116
@@ -403,9 +407,9 @@ local function Ansi16_RGB(Ansi16: number)
 	end
 	local Mult = bit32.band(if Ansi16 > 50 then 1 else 0 + 1, u32ConversionHex) * 0.5
 	
-	return (bit32.band(Color, 1) * Mult) * 255,
-		(bit32.band(bit32.rshift(Color, 1), 1) * Mult) * 255,
-		(bit32.band(bit32.rshift(Color, 2), 1) * Mult) * 255
+	return ClampRGB((bit32.band(Color, 1) * Mult) * 255),
+		ClampRGB((bit32.band(bit32.rshift(Color, 1), 1) * Mult) * 255),
+		ClampRGB((bit32.band(bit32.rshift(Color, 2), 1) * Mult) * 255)
 end
 
 local function Ansi16_Color3(Ansi16: number)
@@ -421,9 +425,9 @@ local function Ansi256_RGB(Ansi256: number)
 	local Color = Ansi256 - 16
 	local Rem = Color % 36
 
-	return (math.floor(Color / 36) / 5) * 255,
-		(math.floor(Rem / 6) / 5) * 255,
-		((Rem % 6) / 5) * 255
+	return ClampRGB((math.floor(Color / 36) / 5) * 255),
+		ClampRGB((math.floor(Rem / 6) / 5) * 255),
+		ClampRGB(((Rem % 6) / 5) * 255)
 end
 
 local function Ansi256_Color3(Ansi256: number)
@@ -436,9 +440,9 @@ end
 
 local function HEX_RGB(Hex: string)
 	local Hex = string.gsub(Hex, "#", "")
-	return tonumber(`0x{string.sub(Hex, 1, 2)}`), 
-		tonumber(`0x{string.sub(Hex, 3, 4)}`),
-		tonumber(`0x{string.sub(Hex, 5, 6)}`)
+	return ClampRGB(tonumber(`0x{string.sub(Hex, 1, 2)}`)), 
+		ClampRGB(tonumber(`0x{string.sub(Hex, 3, 4)}`)),
+		ClampRGB(tonumber(`0x{string.sub(Hex, 5, 6)}`))
 end
 
 local function RGB_HCG(R: number, G: number, B: number)
@@ -502,22 +506,22 @@ local function HCG_RGB(H: number, C: number, G: number)
 	local FlooredHI = math.floor(HI)
 
 	if FlooredHI == 0 then
-		return ((C * 1) + MG) * 255, ((C * V) + MG) * 255, 0
+		return ClampRGB(math.abs(((C * 1) + MG) * 255)), ClampRGB(math.abs(((C * V) + MG) * 255)), 0
 
 	elseif FlooredHI == 1 then
-		return ((C * W) + MG) * 255, ((C * 1) + MG) * 255, 0
+		return ClampRGB(math.abs(((C * W) + MG) * 255)), ClampRGB(math.abs(((C * 1) + MG) * 255)), 0
 
 	elseif FlooredHI == 2 then 
-		return 0, ((C * 1) + MG) * 255, ((C * V) + MG) * 255
+		return 0, ClampRGB(math.abs(((C * 1) + MG) * 255)), ClampRGB(math.abs(((C * V) + MG) * 255))
 
 	elseif FlooredHI == 3 then
-		return 0, ((C * W) + MG) * 255, ((C * 1) + MG) * 255
+		return 0, ClampRGB(math.abs(((C * W) + MG) * 255)), ClampRGB(math.abs(((C * 1) + MG) * 255))
 
 	elseif FlooredHI == 4 then
-		return ((C * V) + MG) * 255, 0, ((C * 1) + MG) * 255
+		return ClampRGB(math.abs(((C * V) + MG) * 255)), 0, ClampRGB(math.abs(((C * 1) + MG) * 255))
 
 	else
-		return ((C * 1) + MG) * 255, 0, ((C * W) + MG) * 255
+		return ClampRGB(math.abs(((C * 1) + MG) * 255)), 0, ClampRGB(math.abs(((C * W) + MG) * 255))
 
 	end
 end
@@ -566,7 +570,7 @@ local function HWB_HCG(H: number, W: number, B: number)
 end
 
 local function Apple_RGB(R16: number, G16: number, B16: number)
-	return (R16 / 65535) * 255, (G16 / 65535) * 255, (B16 / 65535) * 255
+	return ClampRGB((R16 / 65535) * 255), ClampRGB((G16 / 65535) * 255), ClampRGB((B16 / 65535) * 255)
 end
 
 local function Apple_Color3(R16: number, G16: number, B16: number)
@@ -578,7 +582,7 @@ local function RGB_Apple(R: number, G: number, B: number)
 end
 
 local function Grey_RGB(Grey: number)
-	local Color = (Grey / 100) * 255
+	local Color = ClampRGB((Grey / 100) * 255)
 	return Color, Color, Color
 end
 
@@ -803,5 +807,9 @@ local Exports = table.freeze({
 		Label = "Color3"
 	})
 })
+
+print(Exports.HSV.RGB(20, 1, 50))
+print(Exports.HCG.RGB(90, 200, 160))
+
 
 return Exports 
