@@ -1,6 +1,3 @@
-local BulkImportService = game:GetService("BulkImportService")
-local EngineAPICloudProcessingService = game:GetService("EngineAPICloudProcessingService")
-local BulkImportService = game:GetService("BulkImportService")
 -- MIT license */
 -- eslint-disable no-mixed-operators */
 --[[
