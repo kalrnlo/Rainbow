@@ -44,7 +44,6 @@ local function RGB_HSL(R: number, G: number, B: number)
 	local B = B / 255
 	local Min = math.min(R, G, B)
 	local Max = math.max(R, G, B)
-	local L = (Min + Max) / 2
 	local Delta = Max - Min
 
     local H = if R == Max then
@@ -70,7 +69,7 @@ local function RGB_HSL(R: number, G: number, B: number)
 		    Delta / (Max + Min)
 	    else 
             Delta / ((2 - Max) - Min)
-		)
+	)
 
 	return H, S * 100, L * 100
 end
@@ -407,32 +406,23 @@ local function HSV_Ansi16(H: number, S: number, V: number)
 	return RGB_Ansi16(HSV_RGB(H, S, V), V)
 end
 
-convert.rgb.ansi256 = function (args) {
-	const r = args[0];
-	const g = args[1];
-	const b = args[2];
-
+local function RGB_Ansi256(R: number, G: number, B: number)
 	-- We use the extended greyscale palette here, with the exception of
 	-- black and white. normal palette only has 4 greyscale shades.
-	if (r >> 4 === g >> 4 && g >> 4 === b >> 4) {
-		if (r < 8) {
-			return 16;
-		}
+	if bit32.rshift(R, 4) == bit32.rshift(G, 4) and bit32.rshift(G, 4) == bit32.rshift(B, 4) then
+		if R < 8 then
+			return 16
+		elseif R > 248 then
+			return 231
+		else
+			return math.floor(((R - 8) / 247) * 24) + 232
+		end
+	end
 
-		if (r > 248) {
-			return 231;
-		}
-
-		return Math.round(((r - 8) / 247) * 24) + 232;
-	}
-
-	const ansi = 16
-		+ (36 * Math.round(r / 255 * 5))
-		+ (6 * Math.round(g / 255 * 5))
-		+ Math.round(b / 255 * 5);
-
-	return ansi;
-};
+	return 16 + (36 * math.floor((R / 255) * 5))
+		+ (6 * math.floor((G / 255) * 5))
+		+ math.floor((B / 255) * 5);
+end
 
 convert.ansi16.rgb = function (args) {
 	args = args[0];
