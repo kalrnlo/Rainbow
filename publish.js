@@ -6,9 +6,9 @@ const preaddir = promisify(readdir);
 
 const execAsync = promisify(exec);
 
-preaddir('./libs').then(async (files) => {
+preaddir('./Packages').then(async (files) => {
 	for (const file of files) {
-		await execAsync(`wally publish --project-path ./libs/${file}`).then((res) => {
+		await execAsync(`wally publish --project-path ./Packages/${file}`).then((res) => {
 			console.log(res.stdout);
 		});
 	}

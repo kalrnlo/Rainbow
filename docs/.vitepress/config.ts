@@ -2,12 +2,13 @@ import { defineConfig } from 'vitepress'
 
 function sidebar() {
 	return [
-		{ text: 'Quack', link: '/bin' },
-		{ text: 'Convert', link: '/clock' },
-		{ text: 'Contrast', link: '/collection' },
-		{ text: 'Distance', link: '/fetch' },
-		{ text: 'Dither', link: '/future' },
-		{ text: 'ImageData', link: '/guard' },
+		{ text: 'Quack', link: '/Quack' },
+		{ text: 'Convert', link: '/Convert' },
+		{ text: 'Contrast', link: '/Contrast' },
+		{ text: 'Distance', link: '/Distance' },
+		{ text: 'Dither', link: '/Dither' },
+		{ text: 'ImageData', link: '/ImageData' },
+		{ text: 'Palette', link: '/Palette' },
 	]
 }
 
@@ -25,7 +26,7 @@ export default defineConfig({
 		outline: 'deep',
 
 		socialLinks: [
-			{ icon: 'github', link: 'https://github.com/red-blox/util' },
+			{ icon: 'github', link: 'https://github.com/kalrnlo/Rainbow' },
 			{ icon: 'discord', link: 'https://discord.gg/mchCdAFPWU' },
 		],
 
