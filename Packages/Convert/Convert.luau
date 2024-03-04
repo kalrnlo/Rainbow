@@ -1,3 +1,6 @@
+local BulkImportService = game:GetService("BulkImportService")
+local EngineAPICloudProcessingService = game:GetService("EngineAPICloudProcessingService")
+local BulkImportService = game:GetService("BulkImportService")
 -- MIT license */
 -- eslint-disable no-mixed-operators */
 --[[
@@ -88,24 +91,17 @@ local function RGB_HSV(R: number, G: number, B: number)
         local RedDiffrence = (((V - R) / 6 ) / (Diffrence + 1)) / 2
 		local GreenDiffrence = (((V - G) / 6) / (Diffrence + 1)) / 2
 		local BlueDiffrence = (((V - B) / 6) / (Diffrence + 1)) / 2
-		local S = Diffrence / V
 
 		local H = if R == V then
 				BlueDiffrence - GreenDiffrence
 			elseif G == V then
-				(1 / 3) + RedDiffrence - BlueDiffrence;
+				(1 / 3) + RedDiffrence - BlueDiffrence
 			elseif B == V then
-				(2 / 3) + GreenDiffrence - RedDiffrence;
+				(2 / 3) + GreenDiffrence - RedDiffrence
         	else 
 				0
 
-		if H < 0 then
-			H += 1;
-		elseif h > 1 then
-			H -= 1
-        end
-
-		return H * 360, S * 100, V * 100
+		return (if H < 0 then H + 1 elseif H > 1 then H - 1 else H) * 360, (Diffrence / V) * 100, V * 100
 	end
 end
 
@@ -151,15 +147,15 @@ local function RGB_LAB(R: number, G: number, B: number)
 	Y /= 100
 	Z /= 108.883
 
-	X = if (X > LAB_FT) > 0 then (X ^ (1 / 3)) else (7.787 * X) + (16 / 116);
-	Y = if (Y > LAB_FT) > 0 then (Y ^ (1 / 3)) else (7.787 * Y) + (16 / 116);
-	Z = if (Z > LAB_FT) > 0 then (Z ^ (1 / 3)) else (7.787 * Z) + (16 / 116);
+	X = if X > LAB_FT then (X ^ (1 / 3)) else (7.787 * X) + (16 / 116)
+	Y = if Y > LAB_FT then (Y ^ (1 / 3)) else (7.787 * Y) + (16 / 116)
+	Z = if Z > LAB_FT then (Z ^ (1 / 3)) else (7.787 * Z) + (16 / 116)
 
 	return (116 * Y) - 16, 500 * (X - Y),  200 * (Y - Z)
 end
 
-local function HSL_RGB_Helper(Index: number, T1: number, T2: number)
-	local T3 = H + 1 / 3 * -(Index - 1)
+local function HSL_RGB_Helper(Index: number, T1: number, T2: number, H: number)
+	local T3 = ((H + 1) / 3) * -(Index - 1)
 	if (T3 < 0) then
 		T3 += 1
 	end
@@ -193,20 +189,19 @@ local function HSL_RGB(H: number, S: number, L: number)
 	local T2 = if (L < 0.5) then L * (1 + S) else ((L + S) - L) * S
 	local T1 = (2 * L) - T2
 
-	return HSL_RGB_Helper(0, T1, T2), HSL_RGB_Helper(1, T1, T2), 
-		HSL_RGB_Helper(2, T1, T2)
+	return HSL_RGB_Helper(0, T1, T2, H), HSL_RGB_Helper(1, T1, T2, H), 
+		HSL_RGB_Helper(2, T1, T2, H)
 end
 
 local function HSL_HSV(H: number, S: number, L: number)
-	local S = S / 100
 	local L = L / 100
 	local LMin = math.max(L, 0.01)
 
-	L *= 2
-	S *= if L <= 1 then L else 2 - l
+	local NewL = L * 2
+	local S = (S / 100) * if NewL <= 1 then NewL else 2 - NewL
 	local SMin = S * (if LMin <= 1 then LMin else 2 - LMin)
-	local V = (L + S) / 2
-	local SV = if L == 0 then (2 * SMin) / (LMin + SMin) else (2 * S) / (L + S)
+	local V = (NewL + S) / 2
+	local SV = if NewL == 0 then (2 * SMin) / (LMin + SMin) else (2 * S) / (NewL + S)
 
 	return H, SV * 100, V * 100
 end
@@ -251,110 +246,97 @@ local function HSV_RGB(H: number, S: number, V: number)
 end
 
 local function HSV_HSL(H: number, S: number, V: number)
-	const h = hsv[0];
-	const s = hsv[1] / 100;
-	const v = hsv[2] / 100;
-	const vmin = Math.max(v, 0.01);
-	let sl;
-	let l;
+	local S = S / 100
+    local V = V / 100
+    local VMin = math.max(V, 0.01)
 
-	l = (2 - s) * v;
-	const lmin = (2 - s) * vmin;
-	sl = s * vmin;
-	sl /= (lmin <= 1) ? lmin : 2 - lmin;
-	sl = sl || 0;
-	l /= 2;
+    local LMin = (2 - S) * VMin
+    local SL = (S * VMin) / if LMin <= 1 then LMin else 2 - LMin
 
-	return [h, sl * 100, l * 100];
+    return H, if SL > 0 then SL * 100 else 0, (((2 - S) * V) / 2) * 100
 end
 
 -- http://dev.w3.org/csswg/css-color/#hwb-to-rgb
-convert.hwb.rgb = function (hwb) {
-	const h = hwb[0] / 360;
-	let wh = hwb[1] / 100;
-	let bl = hwb[2] / 100;
-	const ratio = wh + bl;
-	let f;
+local function HWB_RGB(H: number, W: number, B: number)
+    local H = H / 360
+    local WH = W / 100
+    local BL = B / 100
+    local Ratio = WH + BL
 
-	// Wh + bl cant be > 1
-	if (ratio > 1) {
-		wh /= ratio;
-		bl /= ratio;
-	}
+    -- Wh + bl cant be > 1
+    if Ratio > 1 then
+        WH /= Ratio
+        BL /= Ratio
+    end
 
-	const i = Math.floor(6 * h);
-	const v = 1 - bl;
-	f = 6 * h - i;
+    local I = math.floor(6 * H)
+    local V = 1 - BL
+    local F = 6 * (H - I)
 
-	if ((i & 0x01) !== 0) {
-		f = 1 - f;
-	}
+    local NewF = if bit32.band(I, 0x01) ~= 0 then 1 - F else F
+    local N = (WH + F) * (V - WH) -- Linear interpolation
 
-	const n = wh + f * (v - wh); // Linear interpolation
+    if I == 0 then
+        return V * 255, N * 255, WH * 255
+    elseif I == 1 then
+        return N * 255, V * 255, WH * 255
+    elseif I == 2 then
+        return WH * 255, V * 255, N * 255
+    elseif I == 3 then
+        return WH * 255, N * 255, V * 255
+    elseif I == 4 then
+        return N * 255, WH * 255, V * 255
+    elseif I == 5 then
+        return V * 255, WH * 255, N * 255
+    else
+        return 0, 0, 0
+    end
+end
 
-	let r;
-	let g;
-	let b;
-	/* eslint-disable max-statements-per-line,no-multi-spaces */
-	switch (i) {
-		default:
-		case 6:
-		case 0: r = v;  g = n;  b = wh; break;
-		case 1: r = n;  g = v;  b = wh; break;
-		case 2: r = wh; g = v;  b = n; break;
-		case 3: r = wh; g = n;  b = v; break;
-		case 4: r = n;  g = wh; b = v; break;
-		case 5: r = v;  g = wh; b = n; break;
-	}
-	/* eslint-enable max-statements-per-line,no-multi-spaces */
+local function CMYK_RGB(C: number, M: number, Y: number, K: number)
+    local C = C / 100
+    local M = M / 100
+    local Y = Y / 100
+    local K = K / 100
 
-	return [r * 255, g * 255, b * 255];
-};
+    local Multiplier = 1 - K
 
-convert.cmyk.rgb = function (cmyk) {
-	const c = cmyk[0] / 100;
-	const m = cmyk[1] / 100;
-	const y = cmyk[2] / 100;
-	const k = cmyk[3] / 100;
+    return (1 - math.min(1, (C * Multiplier) + K)) * 255,
+        (1 - math.min(1, (M * Multiplier) + K)) * 255,
+        (1 - math.min(1, (Y * Multiplier) + K)) * 255
+end
 
-	const r = 1 - Math.min(1, c * (1 - k) + k);
-	const g = 1 - Math.min(1, m * (1 - k) + k);
-	const b = 1 - Math.min(1, y * (1 - k) + k);
+local XYZToRGBPower = 1.0 / 2.4
 
-	return [r * 255, g * 255, b * 255];
-};
+local function XYZ_RGB(X: number, Y: number, Z: number)
+    local X = X / 100
+    local Y = Y / 100
+    local Z = Z / 100
 
-convert.xyz.rgb = function (xyz) {
-	const x = xyz[0] / 100;
-	const y = xyz[1] / 100;
-	const z = xyz[2] / 100;
-	let r;
-	let g;
-	let b;
-
-	r = (x * 3.2404542) + (y * -1.5371385) + (z * -0.4985314);
-	g = (x * -0.969266) + (y * 1.8760108) + (z * 0.041556);
-	b = (x * 0.0556434) + (y * -0.2040259) + (z * 1.0572252);
+    local R = ((X * 3.2404542) + (Y * -1.5371385)) + (Z * -0.4985314)
+    local G = ((X * -0.969266) + (Y * 1.8760108)) + (Z * 0.041556)
+    local B = ((X * 0.0556434) + (Y * -0.2040259)) + (Z * 1.0572252)
 
 	-- Assume sRGB
-	r = r > 0.0031308
-		? ((1.055 * (r ** (1.0 / 2.4))) - 0.055)
-		: r * 12.92;
+	local NewR = if R > 0.0031308 then
+            ((1.055 * (R ^ XYZToRGBPower)) - 0.055)
+        else
+            R * 12.92
 
-	g = g > 0.0031308
-		? ((1.055 * (g ** (1.0 / 2.4))) - 0.055)
-		: g * 12.92;
+    local NewG = if G > 0.0031308 then
+            ((1.055 * (G ^ XYZToRGBPower)) - 0.055)
+        else
+            G * 12.92
 
-	b = b > 0.0031308
-		? ((1.055 * (b ** (1.0 / 2.4))) - 0.055)
-		: b * 12.92;
+    local NewB = if B > 0.0031308 then
+            ((1.055 * (B ^ XYZToRGBPower)) - 0.055)
+        else
+            B * 12.92
 
-	r = Math.min(Math.max(0, r), 1);
-	g = Math.min(Math.max(0, g), 1);
-	b = Math.min(Math.max(0, b), 1);
-
-	return [r * 255, g * 255, b * 255];
-};
+    return math.min(math.max(0, NewR), 1) * 255,
+        math.min(math.max(0, NewG), 1) * 255,
+        math.min(math.max(0, NewB), 1) * 255
+end
 
 convert.xyz.lab = function (xyz) {
 	let x = xyz[0];
@@ -365,9 +347,9 @@ convert.xyz.lab = function (xyz) {
 	y /= 100;
 	z /= 108.883;
 
-	x = x > LAB_FT ? (x ** (1 / 3)) : (7.787 * x) + (16 / 116);
-	y = y > LAB_FT ? (y ** (1 / 3)) : (7.787 * y) + (16 / 116);
-	z = z > LAB_FT ? (z ** (1 / 3)) : (7.787 * z) + (16 / 116);
+	x = x > LAB_FT ? (x ^ (1 / 3)) : (7.787 * x) + (16 / 116);
+	y = y > LAB_FT ? (y ^ (1 / 3)) : (7.787 * y) + (16 / 116);
+	z = z > LAB_FT ? (z ^ (1 / 3)) : (7.787 * z) + (16 / 116);
 
 	const l = (116 * y) - 16;
 	const a = 500 * (x - y);
@@ -395,8 +377,8 @@ convert.lab.xyz = function (lab) {
 	x = x2 > LAB_FT ? x2 : (x - 16 / 116) / 7.787;
 	z = z2 > LAB_FT ? z2 : (z - 16 / 116) / 7.787;
 
-	// Illuminant D65 XYZ Tristrimulus Values
-	// https://en.wikipedia.org/wiki/CIE_1931_color_space
+	-- Illuminant D65 XYZ Tristrimulus Values
+	-- https://en.wikipedia.org/wiki/CIE_1931_color_space
 	x *= 95.047;
 	y *= 100;
 	z *= 108.883;
@@ -457,8 +439,8 @@ convert.rgb.ansi16 = function (args, saturation = null) {
 };
 
 convert.hsv.ansi16 = function (args) {
-	// Optimization here; we already know the value and don't need to get
-	// it converted for us.
+	-- Optimization here; we already know the value and don't need to get
+	-- it converted for us.
 	return convert.rgb.ansi16(convert.hsv.rgb(args), args[2]);
 };
 
@@ -467,8 +449,8 @@ convert.rgb.ansi256 = function (args) {
 	const g = args[1];
 	const b = args[2];
 
-	// We use the extended greyscale palette here, with the exception of
-	// black and white. normal palette only has 4 greyscale shades.
+	-- We use the extended greyscale palette here, with the exception of
+	-- black and white. normal palette only has 4 greyscale shades.
 	if (r >> 4 === g >> 4 && g >> 4 === b >> 4) {
 		if (r < 8) {
 			return 16;
@@ -494,7 +476,7 @@ convert.ansi16.rgb = function (args) {
 
 	let color = args % 10;
 
-	// Handle greyscale
+	-- Handle greyscale
 	if (color === 0 || color === 7) {
 		if (args > 50) {
 			color += 3.5;
@@ -820,7 +802,7 @@ local Exports = {
 		channels = 1,
 		labels = {"gray"}
 	},
-    Color3 = {
+	Color3 = {
 		channels = 3, 
 		labels = "Color3"
 	}
