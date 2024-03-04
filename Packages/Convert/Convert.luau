@@ -401,7 +401,7 @@ local function Ansi16_RGB(Ansi16: number)
 		local NewColor = (if Ansi16 > 50 then Color + 3.5 else Color) / (10.5 * 255)
 		return NewColor, NewColor, NewColor
 	end
-	local Mult = (bit32.band(if Ansi16 > 50 then 1 else 0) + 1, u32ConversionHex) * 0.5
+	local Mult = bit32.band(if Ansi16 > 50 then 1 else 0 + 1, u32ConversionHex) * 0.5
 	
 	return (bit32.band(Color, 1) * Mult) * 255,
 		(bit32.band(bit32.rshift(Color, 1), 1) * Mult) * 255,
@@ -666,7 +666,7 @@ end
 
 local Exports = table.freeze({
 	RGB = table.freeze({
-		Color3 = Color3.fromRGB,
+		Color3 = (if Color3 then Color3.fromRGB else function() end) :: (R: number, G: number, B: number) -> Color3,
 		Ansi256 = RGB_Ansi256,
 		Ansi16 = RGB_Ansi16,
 		Apple = RGB_Apple,
@@ -693,7 +693,7 @@ local Exports = table.freeze({
 		Label = "HSL"
 	}),
 	HSV = table.freeze({
-		Color3 = Color3.fromHSV,
+		Color3 = (if Color3 then Color3.fromHSV else function() end) :: (H: number, S: number, V: number) -> Color3,
 		Ansi16 = HSV_Ansi16,
 		HCG = HSV_HCG,
 		HSL = HSV_HSL,
@@ -739,7 +739,7 @@ local Exports = table.freeze({
 		Label = "LCH"
 	}),
 	HEX = table.freeze({
-		Color3 = Color3.fromHex,
+		Color3 = (if Color3 then Color3.fromHex else function() end) :: (Hex: string) -> Color3,
 		RGB = HEX_RGB,
 
 		Channels = 1,
