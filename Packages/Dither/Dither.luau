@@ -8,8 +8,6 @@
 -- @Kalrnlo
 -- 27/02/2024
 
-local ColorDistance = require(script.Parent.ColorDistance)
-local ImageData = require(script.Parent.ImageData)
 local Future = require(script.Parent.Future)
 
 export type DitheringMethod = ArrayDitheringMethod | "ErrorDiffusionRiemersma" | "NearestColor"
@@ -48,6 +46,8 @@ type ArrayDitheringMethod = "FloydSteinberg" | "FalseFloydSteinberg" | "Stucki" 
 	"Jarvis" | "Burkes" | "Sierra" | "TwoSierra" | "SierraLite"
 
 type ImageOrImages = {ImageData} | {EditableImage} | EditableImage | ImageData
+
+type RGBAType = "buffer" | "table" | "Color3" | "number"
 
 type ErrorDiffusionRiemersmaInfo = {
 	ErrorPropagation: number?,
@@ -88,18 +88,49 @@ type DistanceFormulaDefaults = {
     KA: number,   
 }
 
+type ImageDataPrototype<T> = {
+	Set: ((self: ImageData<T>, Index: number, R: number, G: number, B: number, A: number?) -> ()) &
+		((self: ImageData<T>, Index: number,  Color3: Color3) -> ()) &
+		((self: ImageData<T>, Index: number, RGBOrRGBA: {number}) -> ()) &
+		((self: ImageData<T>, Index: number, RGBOrRGBA: buffer) -> ()),
+	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
+	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
+	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
+	__len: (self: ImageData<T>) -> number,
+}
+
 type PalettePrototype = {
-	Nearest: (self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number),
-	Contains: (self: Palette, R: number, G: number, B: number, A: number?) -> boolean,
+	Nearest: ((self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number)) &
+		((self: Palette, Color3: Color3) -> (Color3, number)) &
+		((self: Palette, RGBOrRGBA: {number}) -> {number}) &
+		((self: Palette, RGBOrRGBA: buffer) -> buffer),
+	Contains: ((self: Palette, R: number, G: number, B: number, A: number?) -> boolean) &
+		((self: Palette, Color3: Color3) -> boolean) &
+		((self: Palette, RGBOrRGBA: {number}) -> boolean) &
+		((self: Palette, RGBOrRGBA: buffer) -> boolean),
 	Remove: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
+		((self: Palette, Color3: Color3) -> ()) &
+		((self: Palette, RGBOrRGBA: {number}) -> ()) &
+		((self: Palette, RGBOrRGBA: buffer) -> ()) &
 		((self: Palette, Index: number) -> ()),
-	__iter: (self: Palette) -> () -> (number, number, number, number, number),
-	Add: (self: Palette, R: number, G: number, B: number, A: number?) -> (),
+	Add: ((self: Palette, R: number, G: number, B: number, A: number?) -> ()) &
+		((self: Palette, Color3: Color3) -> ()) &
+		((self: Palette, RGBOrRGBA: {number}) -> ()) &
+		((self: Palette, RGBOrRGBA: buffer) -> ()),
 	Peek: (self: Palette, Index: number) -> (number, number, number, number),
 	Iter: (self: Palette) -> () -> (number, number, number, number, number),
-	__len: (self: Palette) -> number,
 	Sort: (self: Palette) -> (),
+	
+	__iter: (self: Palette) -> () -> (number, number, number, number, number),
+	__len: (self: Palette) -> number,
 }
+
+export type ImageData<T> = typeof(setmetatable({} :: {
+	Pixels: T & ({number} | buffer),
+	Height: number,
+	Width: number,
+	Size: number,
+}, {} :: ImageDataPrototype<T>))
 
 export type Palette = typeof(setmetatable({} :: {
 	Calcuator: DistanceCalcuator,
@@ -124,6 +155,12 @@ type DistanceCalcuator = {
 	CalcuateNormalized: CalcuatorFunction,
     Defualts: DistanceFormulaDefaults,
     CalculateRaw: CalcuatorFunction,
+	Whitepoint: {
+		R: number,
+		G: number,
+		B: number,
+		A: number,
+	}
     WhitepointR: number,
     WhitepointG: number,
     WhitepointB: number,
@@ -237,6 +274,84 @@ local function HueGroup(Hue: number, Segments: number)
 	return 0
 end
 
+local function FormatRGBA(RGBAType: RGBAType, R: number, G: number, B: number, A: number): any
+	if RGBAType == "number" then
+		return R, G, B, A
+	elseif RGBAType == "Color3" then
+		return Color3.fromRGB(R, G, B), A
+	elseif RGBAType == "table" then
+		local RGBATable = table.create(4)
+		RGBATable[1] = R
+		RGBATable[1] = G
+		RGBATable[1] = B
+		RGBATable[1] = A
+		return RGBATable
+	else
+		local RGBABuffer = buffer.create(4)
+		buffer.writeu8(RGBABuffer, 0, R)
+		buffer.writeu8(RGBABuffer, 1, G)
+		buffer.writeu8(RGBABuffer, 2, B)
+		buffer.writeu8(RGBABuffer, 3, A)
+		return RGBABuffer
+	end
+end
+
+local function GetRGBA(
+	Value: number | buffer | Color3 | {number},
+	G: number?,
+	B: number?,
+	A: number?
+): (number, number, number, number, RGBAType)
+	if typeof(Value) == "number" and G and B and A then
+		return R, G, B, A, typeof(Value)
+	elseif typeof(Value) == "buffer" then
+		-- ColorBuffers in Palette.Colors are 8 bytes
+		-- so allowing it to be greater than 4 is so someone could
+		-- use a ColorBuffer without it erroring
+		if buffer.len(Value) >= 4 then
+			return buffer.readu8(Value, 0), 
+				buffer.readu8(Value, 1),
+				buffer.readu8(Value, 2),
+				buffer.readu8(Value, 3),
+				typeof(Value)
+		elseif buffer.len(Value) == 3 then
+			return buffer.readu8(Value, 0), 
+				buffer.readu8(Value, 1),
+				buffer.readu8(Value, 2), 
+				0,
+				typeof(Value)
+		else
+			error("[Quack] buffer provided does not have length of either 3 or 4++")
+		end
+	elseif typeof(Value) == "Color3" then
+		return math.clamp(math.ceil(Color3.R * 255), 0, 255),
+			math.clamp(math.ceil(Color3.G * 255), 0, 255),
+			math.clamp(math.ceil(Color3.B * 255), 0, 255),
+			0,
+			typeof(Value)
+	elseif typeof(Value) == "table" then
+		if #Value >= 3 then
+			return Value[1],
+				Value[2],
+				Value[3],
+				Value[4] or 0,
+				typeof(Value)
+		else
+			error("[Quack] Table is not of valid lengths 3 or 4")
+		end
+	else
+		error("[Quack] Value is not of types that represent an RGB or RGBA value:\n\t3 or 4 long array, Color3, 3 or 4 long tuple made up of numbers, or a 3 or 4++ long buffer with the first 3 or 4 bytes as u8s")
+	end
+end
+
+local function IsArray<T, K, V>(Tbl: T & {[K]: V}): (T & {[number]: V})?
+	return if Tbl[1] then Tbl :: any else nil
+end
+
+local function GetClassLength<T>(self: T & {Size: number})
+	return self.Size
+end
+
 local function To32Bit(N: number)
 	return bit32.band(N, BitConversionHex)
 end
@@ -287,6 +402,142 @@ local function BufferWriteRGBA(
 	buffer.writeu8(Buffer, NewIndex + 2, B)
 	buffer.writeu8(Buffer, NewIndex + 3, A)
 	return Buffer
+end
+
+--------------------------------------------------------------------------------
+-- Image Data
+--------------------------------------------------------------------------------
+
+local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, number?, number?, number?)
+	if typeof(self.Pixels) == "table" then
+		if Index < 1 then
+			return nil, nil, nil, nil
+		end
+		local NewIndex = if Index > 1 then Index * 4 else 1
+
+		return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
+			self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
+	else
+		if Index < 0 then
+			return nil, nil, nil, nil
+		end
+		local NewIndex = if Index > 1 then Index * 4 else 0
+
+		if NewIndex > buffer.len(self.Pixels) then
+			return nil, nil, nil, nil
+		else
+			return BufferReadRGBA(self.Pixels, Index)
+		end
+	end
+end
+
+local function ImageData_Iter<T>(self: ImageData<T>)
+	if typeof(self.Pixels) == "table" then
+		local Length = #self.Pixels
+		local Index = 1
+
+		return function()
+			Index = if Index ~= 1 then Index + 4 else Index
+
+			if Index > Length then
+				error("[Quack] ImageData iterator tried to go out of bounds")
+			end
+
+			-- Index, R, G, B, A
+			return Index, self.Pixels[Index], self.Pixels[Index + 1],
+				self.Pixels[Index + 2], self.Pixels[Index + 3]
+		end
+	else
+		local Length = buffer.len(self.Pixels)
+		local Index = 0
+
+		return function()
+			Index = if Index ~= 0 then Index + 4 else Index
+			
+			if Index > Length then
+				error("[Quack] ImageData iterator tried to go out of bounds")
+			end
+
+			-- Index, R, G, B, A
+			return Index, BufferReadRGBA(self.Pixels, Index)
+		end
+	end
+end
+
+local function ImageData_Set<T>(
+	self: ImageData<T>,
+	Index: number,
+	Value: any,
+	G: number,
+	B: number,
+	A: number?
+)
+	local R, G, B, A = GetRGBA(Value, G, B, A)
+
+	if typeof(self.Pixels) == "table" then
+		if Index < 1 then return end
+		local NewIndex = if Index > 1 then Index * 4 else 1
+
+		self.Pixels[NewIndex] = R
+		self.Pixels[NewIndex + 1] = G
+		self.Pixels[NewIndex + 2] = B
+		self.Pixels[NewIndex + 3] = A or 0
+	else
+		if Index < 0 then return end
+		local NewIndex = if Index > 1 then Index * 4 else 0
+
+		if NewIndex + 4 <= buffer.len(self.Pixels) then
+			buffer.writeu8(self.Pixels, NewIndex, R)
+			buffer.writeu8(self.Pixels, NewIndex + 1, G)
+			buffer.writeu8(self.Pixels, NewIndex + 2, B)
+			buffer.writeu8(self.Pixels, NewIndex + 3, A)
+		end
+	end
+end
+
+local ImageDataPrototype = {
+	__iter = ImageData_Iter,
+	__len = GetClassLength,
+	Iter = ImageData_Iter,
+	Peek = ImageData_Peek,
+	Set = ImageData_Set,
+}
+ImageDataPrototype.__index = ImageDataPrototype
+
+local function CreateImageData(Data: EditableImage | {number} | buffer, Width: number?, Height: number?, CopyPixels: boolean?)
+	if typeof(Data) == "Instance" then
+		return setmetatable({
+			Pixels = Data:ReadPixels(Vector2.new(), Data.Size),
+			Height = Data.Size.Y,
+			Width = Data.Size.X,
+		}, ImageDataPrototype)
+	else
+		local Length = if typeof(Data) == "table" then #Data else buffer.len(Data)
+
+		if not Width or Height then
+			error("[Quack] Cannot create ImageData for array or buffer, without Width or Height provided")
+		elseif Length < 4 then
+			error("[Quack] Data provided does not include atleast 1 pixel")
+		end
+		local CopyPixels = CopyPixels or true
+		local Pixels = Data
+
+		if CopyPixels then
+			if typeof(Data) == "buffer" then
+				Pixels = buffer.create(Length)
+				buffer.copy(Pixels, 0, Data)
+			else
+				Pixels = table.clone(Data)
+			end
+		end
+
+		return setmetatable({
+			Size = Length / 4,
+			Pixels = Pixels,
+			Height = Height,
+			Width = Width,
+		}, ImageDataPrototype)
+	end
 end
 
 --------------------------------------------------------------------------------
@@ -1709,8 +1960,8 @@ local Exports = table.freeze({
 		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> (Palette, ImageData)) &
 		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> (Palette, {ImageData})),
 
-	Palettize = Palletize :: (<T>(Image: ImageData<T>, PalletizeInfo: PalletizeInfo) -> Palette) &
-		(<T>(Images: {ImageData<T>}, PalletizeInfo: PalletizeInfo) -> Palette) &
+	Palettize = Palletize :: ((Image: ImageData, PalletizeInfo: PalletizeInfo) Palette) &
+		((Images: {ImageData}, PalletizeInfo: PalletizeInfo) -> Palette) &
 		((EditableImage: EditableImage, PalletizeInfo: PalletizeInfo) -> Palette) &
 		((EditableImages: {EditableImage}, PalletizeInfo: PalletizeInfo) -> Palette),
 
