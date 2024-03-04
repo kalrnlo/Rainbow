@@ -1,6 +1,6 @@
 {
 	"name": "Packages",
 	"tree": {
-		"$path": "Rainbow/Packages"
+		"$className": "ReplicatedStorage"
 	}
 }
