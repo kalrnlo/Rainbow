@@ -8,6 +8,7 @@
 -- @Kalrnlo
 -- 27/02/2024
 
+local Distance = require(script.Parent.Distance)
 local Future = require(script.Parent.Future)
 
 export type DitheringMethod = ArrayDitheringMethod | "ErrorDiffusionRiemersma" | "NearestColor"
@@ -76,29 +77,7 @@ type PaletteInfo = {
 	A: number,
 }
 
-type HueGroup = {
-	Colors: {number},
-	Amount: number,
-}
-
-type DistanceFormulaDefaults = {
-    KR: number,
-    KG: number,
-    KB: number,
-    KA: number,   
-}
-
-type ImageDataPrototype<T> = {
-	Set: ((self: ImageData<T>, Index: number, R: number, G: number, B: number, A: number?) -> ()) &
-		((self: ImageData<T>, Index: number,  Color3: Color3) -> ()) &
-		((self: ImageData<T>, Index: number, RGBOrRGBA: {number}) -> ()) &
-		((self: ImageData<T>, Index: number, RGBOrRGBA: buffer) -> ()),
-	__iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
-	Peek: (self: ImageData<T>, Index: number) -> (number, number, number, number),
-	Iter: (self: ImageData<T>) -> () -> (number, number, number, number, number),
-	__len: (self: ImageData<T>) -> number,
-}
-
+t
 type PalettePrototype = {
 	Nearest: (self: Palette, R: number, G: number, B: number, A: number?) -> (number, number, number, number),
 	Contains: (self: Palette, R: number, G: number, B: number, A: number?) -> boolean,
@@ -120,7 +99,7 @@ export type Palette = typeof(setmetatable({} :: {
 	Size: number,
 }, {} :: PalettePrototype))
 
-local BitConversionHex = 0xFFFFFFFF
+local u32ConversionHex = 0xFFFFFFFF
 local Uint32Hex = 0xFF
 -- sRGB (based on ITU-R Recommendation BT.709)
 -- http://en.wikipedia.org/wiki/SRGB

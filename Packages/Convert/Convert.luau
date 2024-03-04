@@ -1,41 +1,14 @@
--- MIT license */
--- eslint-disable no-mixed-operators */
---[[
-const cssKeywords = require('color-name');
+--!optimise 2
+--!native
+--!strict
 
--- NOTE: conversions should only return primitive values (i.e. arrays, or
---       values that give correct `typeof` results).
---       do not use box values types (i.e. Number(), String(), etc.)
+-- Convert
+-- a port of color-convert.js to luau, with added support for Color3s
+-- @kalrnlo
+-- 04/03/2024
 
-local reverseKeywords = {};
-
-module.exports = convert;
-
-// LAB f(t) constant
-const LAB_FT = Math.pow(6 / 29, 3);
-
-// Hide .channels and .labels properties
-for (const model of Object.keys(convert)) {
-	if (!('channels' in convert[model])) {
-		throw new Error('missing channels property: ' + model);
-	}
-
-	if (!('labels' in convert[model])) {
-		throw new Error('missing channel labels property: ' + model);
-	}
-
-	if (convert[model].labels.length !== convert[model].channels) {
-		throw new Error('channel and label counts mismatch: ' + model);
-	}
-
-	const {channels, labels} = convert[model];
-	delete convert[model].channels;
-	delete convert[model].labels;
-	Object.defineProperty(convert[model], 'channels', {value: channels});
-	Object.defineProperty(convert[model], 'labels', {value: labels});
-}
---]]
-
+-- LAB f(t) constant
+local u32ConversionHex = 0xFFFFFFFF
 local LAB_FT = math.pow(6 / 29, 3)
 
 local function RGB_HSL(R: number, G: number, B: number)
@@ -46,7 +19,8 @@ local function RGB_HSL(R: number, G: number, B: number)
 	local Max = math.max(R, G, B)
 	local Delta = Max - Min
 
-    local H = if R == Max then
+    local H = math.min((
+		if R == Max then
             (G - B) / Delta
         elseif G == Max then   
             2 + (B - R) / Delta
@@ -54,14 +28,8 @@ local function RGB_HSL(R: number, G: number, B: number)
             4 + (R - G) / Delta
         else 
             0
+	) * 60, 360)
 
-	H = math.min(H * 60, 360)
-
-    if H < 0 then
-        H += 360
-    end
-
-	local L = (Min + Max) / 2
     local S = (
 		if Max == Min then
 		    0
@@ -71,7 +39,8 @@ local function RGB_HSL(R: number, G: number, B: number)
             Delta / ((2 - Max) - Min)
 	)
 
-	return H, S * 100, L * 100
+	return if H < 0 then H + 360 else H, S * 100, 
+		((Min + Max) / 2) * 100
 end
 
 local function RGB_HSV(R: number, G: number, B: number)
@@ -103,8 +72,8 @@ end
 
 local function RGB_HWB(R: number, G: number, B: number)
 	return (RGB_HSL(R, G, B)), 
-		((1 / 255) * math.min(R, math.min(G, B))) * 100, 
-		(1 - 1 / 255 * math.max(R, math.max(G, B))) * 100
+		((1 / 255) * math.min(R, G, B)) * 100, 
+		(1 - 1 / 255 * math.max(R, G, B)) * 100
 end
 
 local function RGB_CMYK(R: number, G: number, B: number)
@@ -375,9 +344,9 @@ local LABToLCHDivider = 2 / math.pi
 
 local function LAB_LCH(L: number, A: number, B: number)
     local H = (math.atan2(B, A) * 360) / LABToLCHDivider
-    local C = math.sqrt((A * A) + (B * B))
 
-    return L, C, if H < 0 then H + 360 else H
+    return L, math.sqrt((A * A) + (B * B)), 
+		if H < 0 then H + 360 else H
 end
 
 local Tau = math.pi * 2
@@ -421,345 +390,418 @@ local function RGB_Ansi256(R: number, G: number, B: number)
 
 	return 16 + (36 * math.floor((R / 255) * 5))
 		+ (6 * math.floor((G / 255) * 5))
-		+ math.floor((B / 255) * 5);
+		+ math.floor((B / 255) * 5)
 end
 
-convert.ansi16.rgb = function (args) {
-	args = args[0];
-
-	let color = args % 10;
+local function Ansi16_RGB(Ansi16: number)
+	local Color = Ansi16 % 10
 
 	-- Handle greyscale
-	if (color === 0 || color === 7) {
-		if (args > 50) {
-			color += 3.5;
-		}
+	if Color == 0 or Color == 7 then
+		local NewColor = (if Ansi16 > 50 then Color + 3.5 else Color) / (10.5 * 255)
+		return NewColor, NewColor, NewColor
+	end
+	local Mult = (bit32.band(if Ansi16 > 50 then 1 else 0) + 1, u32ConversionHex) * 0.5
+	
+	return (bit32.band(Color, 1) * Mult) * 255,
+		(bit32.band(bit32.rshift(Color, 1), 1) * Mult) * 255,
+		(bit32.band(bit32.rshift(Color, 2), 1) * Mult) * 255
+end
 
-		color = color / 10.5 * 255;
+local function Ansi16_Color3(Ansi16: number)
+	return Color3.fromRGB(Ansi16_RGB(Ansi16))
+end
 
-		return [color, color, color];
-	}
-
-	const mult = (~~(args > 50) + 1) * 0.5;
-	const r = ((color & 1) * mult) * 255;
-	const g = (((color >> 1) & 1) * mult) * 255;
-	const b = (((color >> 2) & 1) * mult) * 255;
-
-	return [r, g, b];
-};
-
-convert.ansi256.rgb = function (args) {
-	args = args[0];
-
+local function Ansi256_RGB(Ansi256: number)
 	-- Handle greyscale
-	if (args >= 232) {
-		const c = (args - 232) * 10 + 8;
-		return [c, c, c];
-	}
+	if Ansi256 >= 232 then
+		local Color = ((Ansi256 - 232) * 10) + 8
+		return Color, Color, Color
+	end
+	local Color = Ansi256 - 16
+	local Rem = Color % 36
 
-	args -= 16;
+	return (math.floor(Color / 36) / 5) * 255,
+		(math.floor(Rem / 6) / 5) * 255,
+		((Rem % 6) / 5) * 255
+end
 
-	let rem;
-	const r = Math.floor(args / 36) / 5 * 255;
-	const g = Math.floor((rem = args % 36) / 6) / 5 * 255;
-	const b = (rem % 6) / 5 * 255;
+local function Ansi256_Color3(Ansi256: number)
+	return Color3.fromRGB(Ansi256_RGB(Ansi256))
+end
 
-	return [r, g, b];
-};
+local function RGB_HEX(R: number, G: number, B: number)
+	return string.format("#%X%X%X", R, G, B)
+end
 
-convert.rgb.hex = function (args) {
-	const integer = ((Math.round(args[0]) & 0xFF) << 16)
-		+ ((Math.round(args[1]) & 0xFF) << 8)
-		+ (Math.round(args[2]) & 0xFF);
+local function HEX_RGB(Hex: string)
+	local Hex = string.gsub(Hex, "#", "")
+	return tonumber(`0x{string.sub(Hex, 1, 2)}`), 
+		tonumber(`0x{string.sub(Hex, 3, 4)}`),
+		tonumber(`0x{string.sub(Hex, 5, 6)}`)
+end
 
-	const string = integer.toString(16).toUpperCase();
-	return '000000'.substring(string.length) + string;
-};
+local function RGB_HCG(R: number, G: number, B: number)
+	local R = R / 255
+	local G = G / 255
+	local B = B / 255
+	local Max = math.max(R, G, B)
+	local Min = math.min(R, G, B)
+	local Chroma = Max - Min
+	local Hue = (
+		if Chroma <= 0 then
+			0
+		elseif Max == R then
+			((G - B) / Chroma) % 6
+		elseif Max == G then
+			(2 + (B - R)) / Chroma
+		else
+			(4 + (R - G)) / Chroma
+	) / 6
 
-convert.hex.rgb = function (args) {
-	const match = args.toString(16).match(/[a-f0-9]{6}|[a-f0-9]{3}/i);
-	if (!match) {
-		return [0, 0, 0];
-	}
+	return (Hue % 1) * 360, Chroma * 100, 
+		(if Chroma < 1 then Min / (1 - Chroma) else 0) * 100
+end
 
-	let colorString = match[0];
+local function HSL_HCG(H: number, S: number, L: number)
+	local S = S / 100
+	local L = L / 100
+	local C = if L < 0.5 then (2 * S) * L else (2 * S)  * (1 - L)
 
-	if (match[0].length === 3) {
-		colorString = colorString.split('').map(char => {
-			return char + char;
-		}).join('');
-	}
+	return H, C * 100, 
+		if C < 1 then (((L - 0.5) * C) / (1 - C)) * 100 else 0
+end
 
-	const integer = parseInt(colorString, 16);
-	const r = (integer >> 16) & 0xFF;
-	const g = (integer >> 8) & 0xFF;
-	const b = integer & 0xFF;
+local function HSV_HCG(H: number, S: number, V: number)
+	local S = S / 100
+	local V = V / 100
+	local C = S * V
 
-	return [r, g, b];
-};
+	return H, C * 100,
+		if C < 1 then ((V - C) / (1 - C)) * 100 else 0
+end
 
-convert.rgb.hcg = function (rgb) {
-	const r = rgb[0] / 255;
-	const g = rgb[1] / 255;
-	const b = rgb[2] / 255;
-	const max = Math.max(Math.max(r, g), b);
-	const min = Math.min(Math.min(r, g), b);
-	const chroma = (max - min);
-	let grayscale;
-	let hue;
+local function HCG_RGB(H: number, C: number, G: number)
+	local H = H / 360
+	local C = C / 100
+	local G = G / 100
 
-	if (chroma < 1) {
-		grayscale = min / (1 - chroma);
-	} else {
-		grayscale = 0;
-	}
+	if C == 0 then
+		local Value = G * 255
+		return Value, Value, Value
+	end
 
-	if (chroma <= 0) {
-		hue = 0;
-	} else
-	if (max === r) {
-		hue = ((g - b) / chroma) % 6;
-	} else
-	if (max === g) {
-		hue = 2 + (b - r) / chroma;
-	} else {
-		hue = 4 + (r - g) / chroma;
-	}
+	local PureR = 0
+	local PureG = 0
+	local PureB = 0
+	local HI = (H % 1) * 6
+	local MG = (1 - C) * G
+	local V = HI % 1
+	local W = 1 - V
 
-	hue /= 6;
-	hue %= 1;
+	local FlooredHI = math.floor(HI)
 
-	return [hue * 360, chroma * 100, grayscale * 100];
-};
+	if FlooredHI == 0 then
+		return ((C * 1) + MG) * 255, ((C * V) + MG) * 255, 0
 
-convert.hsl.hcg = function (hsl) {
-	const s = hsl[1] / 100;
-	const l = hsl[2] / 100;
+	elseif FlooredHI == 1 then
+		return ((C * W) + MG) * 255, ((C * 1) + MG) * 255, 0
 
-	const c = l < 0.5 ? (2.0 * s * l) : (2.0 * s * (1.0 - l));
+	elseif FlooredHI == 2 then 
+		return 0, ((C * 1) + MG) * 255, ((C * V) + MG) * 255
 
-	let f = 0;
-	if (c < 1.0) {
-		f = (l - 0.5 * c) / (1.0 - c);
-	}
+	elseif FlooredHI == 3 then
+		return 0, ((C * W) + MG) * 255, ((C * 1) + MG) * 255
 
-	return [hsl[0], c * 100, f * 100];
-};
+	elseif FlooredHI == 4 then
+		return ((C * V) + MG) * 255, 0, ((C * 1) + MG) * 255
 
-convert.hsv.hcg = function (hsv) {
-	const s = hsv[1] / 100;
-	const v = hsv[2] / 100;
+	else
+		return ((C * 1) + MG) * 255, 0, ((C * W) + MG) * 255
 
-	const c = s * v;
-	let f = 0;
+	end
+end
 
-	if (c < 1.0) {
-		f = (v - c) / (1 - c);
-	}
+local function HCG_Color3(H: number, C: number, G: number)
+	return Color3.fromRGB(HCG_RGB(H, C, G))
+end
 
-	return [hsv[0], c * 100, f * 100];
-};
+local function HCG_HSV(H: number, C: number, G: number)
+	local C = C / 100
+	local G = G / 100
+	local V = (C + G) * (1 - C)
 
-convert.hcg.rgb = function (hcg) {
-	const h = hcg[0] / 360;
-	const c = hcg[1] / 100;
-	const g = hcg[2] / 100;
+	return H, if V > 0 then (C / V) * 100 else 0, V * 100
+end
 
-	if (c === 0.0) {
-		return [g * 255, g * 255, g * 255];
-	}
+local function HCG_HSL(H: number, C: number, G: number)
+	local C = C / 100
+	local G = G / 100
+	local L = ((G * (1 - C)) + 0.5) * C
+	
+	local S = if L > 0 and L < 0.5 then
+			C / (2 * L)
+		elseif L >= 0.5 and L < 1 then
+			C / (2 * (1 - L))
+		else
+			0
 
-	const pure = [0, 0, 0];
-	const hi = (h % 1) * 6;
-	const v = hi % 1;
-	const w = 1 - v;
-	let mg = 0;
+	return H, S * 100, L * 100
+end
 
-	/* eslint-disable max-statements-per-line */
-	switch (Math.floor(hi)) {
-		case 0:
-			pure[0] = 1; pure[1] = v; pure[2] = 0; break;
-		case 1:
-			pure[0] = w; pure[1] = 1; pure[2] = 0; break;
-		case 2:
-			pure[0] = 0; pure[1] = 1; pure[2] = v; break;
-		case 3:
-			pure[0] = 0; pure[1] = w; pure[2] = 1; break;
-		case 4:
-			pure[0] = v; pure[1] = 0; pure[2] = 1; break;
-		default:
-			pure[0] = 1; pure[1] = 0; pure[2] = w;
-	}
-	/* eslint-enable max-statements-per-line */
+local function HCG_HWB(H: number, C: number, G: number)
+	local C = C / 100
+	local G = G / 100
 
-	mg = (1.0 - c) * g;
+	return H, (V - C) * 100, (1 - ((C + G) * (1 - C))) * 100
+end
 
-	return [
-		(c * pure[0] + mg) * 255,
-		(c * pure[1] + mg) * 255,
-		(c * pure[2] + mg) * 255
-	];
-};
+local function HWB_HCG(H: number, W: number, B: number)
+	local W = W / 100
+	local B = B / 100
+	local V = 1 - B
+	local C = V - W
 
-convert.hcg.hsv = function (hcg) {
-	const c = hcg[1] / 100;
-	const g = hcg[2] / 100;
+	return H, C * 100, if C < 1 then ((V - C) / (1 - C)) * 100 else 0 
+end
 
-	const v = c + g * (1.0 - c);
-	let f = 0;
+local function Apple_RGB(R16: number, G16: number, B16: number)
+	return (R16 / 65535) * 255, (G16 / 65535) * 255, (B16 / 65535) * 255
+end
 
-	if (v > 0.0) {
-		f = c / v;
-	}
+local function Apple_Color3(R16: number, G16: number, B16: number)
+	return Color3.new(R16 / 65535, G16 / 65535, B16 / 65535)
+end
 
-	return [hcg[0], f * 100, v * 100];
-};
+local function RGB_Apple(R: number, G: number, B: number)
+	return (R / 255) * 65535, (G / 255) * 65535, (B / 255) * 65535
+end
 
-convert.hcg.hsl = function (hcg) {
-	const c = hcg[1] / 100;
-	const g = hcg[2] / 100;
+local function Grey_RGB(Grey: number)
+	local Color = (Grey / 100) * 255
+	return Color, Color, Color
+end
 
-	const l = g * (1.0 - c) + 0.5 * c;
-	let s = 0;
+local function Grey_Color3(Grey: number)
+	return Color3.fromRGB(Grey_RGB(Grey))
+end
 
-	if (l > 0.0 && l < 0.5) {
-		s = c / (2 * l);
-	} else
-	if (l >= 0.5 && l < 1.0) {
-		s = c / (2 * (1 - l));
-	}
+local function Grey_HSL(Grey: number)
+	return 0, 0, Grey
+end
 
-	return [hcg[0], s * 100, l * 100];
-};
+local function Grey_HWB(Grey: number)
+	return 0, 100, Grey
+end
 
-convert.hcg.hwb = function (hcg) {
-	const c = hcg[1] / 100;
-	const g = hcg[2] / 100;
-	const v = c + g * (1.0 - c);
-	return [hcg[0], (v - c) * 100, (1 - v) * 100];
-};
+local function Grey_CMYK(Grey: number)
+	return 0, 0, 0, Grey
+end
 
-convert.hwb.hcg = function (hwb) {
-	const w = hwb[1] / 100;
-	const b = hwb[2] / 100;
-	const v = 1 - b;
-	const c = v - w;
-	let g = 0;
+local function Grey_LAB(Grey: number)
+	return Grey, 0, 0
+end
 
-	if (c < 1) {
-		g = (v - c) / (1 - c);
-	}
+local function Grey_HEX(Grey: number)
+	local Value = bit32.band(math.floor((Grey / 100) * 255), 0xFF)
 
-	return [hwb[0], c * 100, g * 100];
-};
+	return string.format(
+		"#%X", bit32.lshift(Value, 16) + bit32.lshift(Value, 8) + Value
+	)
+end
 
-convert.apple.rgb = function (apple) {
-	return [(apple[0] / 65535) * 255, (apple[1] / 65535) * 255, (apple[2] / 65535) * 255];
-};
+local function RGB_Grey(R: number, G: number, B: number)
+	return (((R + G + B) / 3) / 255) * 100
+end
 
-convert.rgb.apple = function (rgb) {
-	return [(rgb[0] / 255) * 65535, (rgb[1] / 255) * 65535, (rgb[2] / 255) * 65535];
-};
+local function Color3_RGB(Color3: Color3)
+	return math.clamp(math.ceil(Color3.R * 255), 0, 255),
+		math.clamp(math.ceil(Color3.G * 255), 0, 255),
+		math.clamp(math.ceil(Color3.B * 255), 0, 255)
+end
 
-convert.gray.rgb = function (args) {
-	return [args[0] / 100 * 255, args[0] / 100 * 255, args[0] / 100 * 255];
-};
+local function Color3_Grey(Color3: Color3)
+	return RGB_Grey(Color3_RGB(Color3))
+end
 
-convert.gray.hsl = function (args) {
-	return [0, 0, args[0]];
-};
+local function Color3_HSV(Color3: Color3)
+	return RGB_HSV(Color3_RGB(Color3))
+end
 
-convert.gray.hsv = convert.gray.hsl;
+local function Color3_HEX(Color3: Color3)
+	return RGB_HEX(Color3_RGB(Color3))
+end
 
-convert.gray.hwb = function (gray) {
-	return [0, 100, gray[0]];
-};
+local function HSL_Color3(H: number, S: number, L: number)
+	return Color3.fromRGB(HSL_RGB(H, S, L))
+end
 
-convert.gray.cmyk = function (gray) {
-	return [0, 0, 0, gray[0]];
-};
+local function HWB_Color3(H: number, W: number, B: number)
+	return Color3.fromRGB(HWB_RGB(H, W, B))
+end
 
-convert.gray.lab = function (gray) {
-	return [gray[0], 0, 0];
-};
+local function XYZ_Color3(X: number, Y: number, Z: number)
+	return Color3.fromRGB(XYZ_RGB(X, Y, Z))
+end
 
-convert.gray.hex = function (gray) {
-	const val = Math.round(gray[0] / 100 * 255) & 0xFF;
-	const integer = (val << 16) + (val << 8) + val;
+local function CMYK_Color3(C: number, M: number, Y: number, K: number)
+	return Color3.fromRGB(CMYK_RGB(C, M, Y, K))
+end
 
-	const string = integer.toString(16).toUpperCase();
-	return '000000'.substring(string.length) + string;
-};
+local function Color3_HSL(Color3: Color3)
+	return RGB_HSL(Color3_RGB(Color3))
+end
 
-local function rgb_gray
+local function Color3_LAB(Color3: Color3)
+	return RGB_LAB(Color3_RGB(Color3))
+end
 
-convert.rgb.gray = function (rgb) {
-	const val = (rgb[0] + rgb[1] + rgb[2]) / 3;
-	return [val / 255 * 100];
-};
+local function Color3_HCG(Color3: Color3)
+	return RGB_HCG(Color3_RGB(Color3))
+end
 
-local Exports = {
-	RGB = {
+local function Color3_HWB(Color3: Color3)
+	return RGB_HWB(Color3_RGB(Color3))
+end
+
+local Exports = table.freeze({
+	RGB = table.freeze({
+		Color3 = Color3.fromRGB,
+		Ansi256 = RGB_Ansi256,
+		Ansi16 = RGB_Ansi16,
+		Apple = RGB_Apple,
+		CMYK = RGB_CMYK,
+		Grey = RGB_Grey,
+		HSL = RGB_HSL,
+		HCG = RGB_HCG,
+		HEX = RGB_HEX,
+		HWB = RGB_HWB,
+		LAB = RGB_LAB,
+		XYZ = RGB_XYZ,
 		HSV = RGB_HSV,
+
 		Channels = 3, 
 		Label = "RGB"
-	},
-	HSL = {
+	}),
+	HSL = table.freeze({
+		Color3 = HSL_Color3,
+		HCG = HSL_HCG,
+		HSV = HSL_HSV,
+		RGB = HSL_RGB,
+
 		Channels = 3,
 		Label = "HSL"
-	},
-	HSV = {
+	}),
+	HSV = table.freeze({
+		Color3 = Color3.fromHSV,
+		Ansi16 = HSV_Ansi16,
+		HCG = HSV_HCG,
+		HSL = HSV_HSL,
+		RGB = HSV_RGB,
+
 		Channels = 3,
 		Label = "HSV"
-	},
-	HWB = {
+	}),
+	HWB = table.freeze({
+		Color3 = HWB_Color3,
+		HCG = HWB_HCG,
+		RGB = HWB_RGB,
+
 		Channels = 3, 
 		Label = "HWB"
-	},
-	CMYK = {
+	}),
+	CMYK = table.freeze({
+		Color3 = CMYK_Color3,
+		RGB = CMYK_RGB,
+
 		Channels = 4,
 		Label = "CMYK"
-	},
-	XYZ = {
+	}),
+	XYZ = table.freeze({
+		Color3 = XYZ_Color3,
+		LAB = XYZ_LAB,
+		RGB = XYZ_RGB,
+
 		Channels = 3,
 		Label = "XYZ"
-	},
-	Lab = {
+	}),
+	LAB = table.freeze({
+		LCH = LAB_LCH,
+		XYZ = LAB_XYZ,
+
 		Channels = 3,
 		Label = "Lab"
-	},
-	LCH = {
+	}),
+	LCH = table.freeze({
+		LAB = LCH_LAB,
+
 		Channels = 3,
 		Label = "LCH"
-	},
-	HEX = {
+	}),
+	HEX = table.freeze({
+		Color3 = Color3.fromHex,
+		RGB = HEX_RGB,
+
 		Channels = 1,
 		Label = "HEX"
-	},
-	Ansi16 = {
+	}),
+	Ansi16 = table.freeze({
+		Color3 = Ansi16_Color3,
+		RGB = Ansi16_RGB,
+
 		Channels = 1,
 		Label = "Ansi16"
-	},
-	Ansi256 = {
+	}),
+	Ansi256 = table.freeze({
+		Color3 = Ansi256_Color3,
+		RGB = Ansi256_RGB,
+
 		Channels = 1,
 		Label = "Ansi256"
-	},
-	HCG = {
+	}),
+	HCG = table.freeze({
+		Color3 = HCG_Color3,
+		HWB = HCG_HWB,
+		HSL = HCG_HSL,
+		HSV = HCG_HSV,
+		RGB = HCG_RGB,
+
 		Channels = 3,
-		Labels = {"H", "C", "G"}
-	},
-	Apple = {
+		Labels = table.freeze({"H", "C", "G"})
+	}),
+	Apple = table.freeze({
+		Color3 = Apple_Color3,
+		RGB = Apple_RGB,
+
 		Channels = 3,
-		Labels = {"R16", "G16", "B16"}
-	},
-	Gray = {
+		Labels = table.freeze({"R16", "G16", "B16"})
+	}),
+	Grey = table.freeze({
+		Color3 = Grey_Color3,
+		CMYK = Grey_CMYK,
+		HWB = Grey_HWB,
+		LAB = Grey_LAB,
+		RGB = Grey_RGB,
+		HSL = Grey_HSL,
+		HSV = Grey_HSL,
+		HEX = Grey_HEX,
+
 		Channels = 1,
-		Label = "Gray"
-	},
-    Color3 = {
+		Label = "Grey"
+	}),
+    Color3 = table.freeze({
+		Grey = Color3_Grey,
+		HEX = Color3_HEX,
+		HSL = Color3_HSL,
+		HSV = Color3_HSV,
+		RGB = Color3_RGB,
+		LAB = Color3_LAB,
+		HWB = Color3_HWB,
+		HCG = Color3_HCG,
+
 		Channels = 3, 
 		Label = "Color3"
-	}
-};
+	})
+})
 
 return Exports 
