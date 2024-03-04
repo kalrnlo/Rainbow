@@ -2,21 +2,17 @@ import { defineConfig } from 'vitepress'
 
 function sidebar() {
 	return [
-		{ text: 'Bin', link: '/bin' },
-		{ text: 'Clock', link: '/clock' },
-		{ text: 'Collection', link: '/collection' },
-		{ text: 'Fetch', link: '/fetch' },
-		{ text: 'Future', link: '/future' },
-		{ text: 'Guard', link: '/guard' },
-		{ text: 'Promise', link: '/promise' },
-		{ text: 'Ratelimit', link: '/ratelimit' },
-		{ text: 'Signal', link: '/signal' },
-		{ text: 'Spawn', link: '/spawn' },
+		{ text: 'Quack', link: '/bin' },
+		{ text: 'Convert', link: '/clock' },
+		{ text: 'Contrast', link: '/collection' },
+		{ text: 'Distance', link: '/fetch' },
+		{ text: 'Dither', link: '/future' },
+		{ text: 'ImageData', link: '/guard' },
 	]
 }
 
 export default defineConfig({
-	title: 'Redblox Util',
+	title: 'Rainbow',
 	description: 'A collection of small utilities for Roblox.',
 	lang: 'en-US',
 	head: [
