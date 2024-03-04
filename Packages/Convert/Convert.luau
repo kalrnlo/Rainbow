@@ -1,6 +1,3 @@
-local BulkImportService = game:GetService("BulkImportService")
-local EngineAPICloudProcessingService = game:GetService("EngineAPICloudProcessingService")
-local BulkImportService = game:GetService("BulkImportService")
 -- MIT license */
 -- eslint-disable no-mixed-operators */
 --[[
@@ -393,27 +390,15 @@ end
 
 local function RGB_Ansi16(R: number, G: number, B: number, Saturation: number?)
 	local Saturation = math.floor((Saturation or (select(2, RGB_HSV(R, G, B)))) / 50)
-
 	if Saturation == 0 then return 30 end
 
-	local Ansi = 30
+	local Ansi = 30 + bit32.bor(
+		math.floor(bit32.lshift((B / 255), 2)),
+		math.floor(bit32.lshift((G / 255), 1)),
+		math.floor(R / 255)
+	)
 
-	if math.floor(bit32.lshift((B / 255), 2)) > 0 then
-		Ansi += math.floor(bit32.lshift((B / 255), 2))
-	elseif math.floor(bit32.lshift((G / 255), 1)) > 0 then
-		Ansi += math.floor(bit32.lshift((G / 255), 1))
-	else
-
-	let ansi = 30
-		+ ((Math.round(b / 255) << 2)
-		| (Math.round(g / 255) << 1)
-		| Math.round(r / 255));
-
-	if (value === 2) {
-		ansi += 60;
-	}
-
-	return ansi;
+	return if Saturation == 2 then Ansi + 60 else Ansi
 end
 
 local function HSV_Ansi16(H: number, S: number, V: number)
