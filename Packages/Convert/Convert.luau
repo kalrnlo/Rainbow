@@ -7,8 +7,8 @@
 -- @kalrnlo
 -- 04/03/2024
 
--- LAB f(t) constant
 local u32ConversionHex = 0xFFFFFFFF
+-- LAB f(t) constant
 local LAB_FT = math.pow(6 / 29, 3)
 
 local function RGB_HSL(R: number, G: number, B: number)
