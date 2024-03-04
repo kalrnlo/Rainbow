@@ -808,8 +808,4 @@ local Exports = table.freeze({
 	})
 })
 
-print(Exports.HSV.RGB(20, 1, 50))
-print(Exports.HCG.RGB(90, 200, 160))
-
-
 return Exports 
