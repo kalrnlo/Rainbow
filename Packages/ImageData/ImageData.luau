@@ -5,7 +5,7 @@
 -- ImageData
 -- Basic editable image pixels wrapper class
 -- @Kalrnlo
--- 01/03/2024
+-- 03/03/2024
 
 type ImageDataPrototype<T> = {
 	Set: (self: ImageData<T>, Index: number, R: number, G: number, B: number, A: number?) -> (),
@@ -57,7 +57,7 @@ local function ImageData_Iter<T>(self: ImageData<T>)
 			Index = if Index ~= 1 then Index + 4 else Index
 
 			if Index > Length then
-				error("[Quack] ImageData iterator tried to go out of bounds")
+				error("[ImageData] Iterator tried to go out of bounds")
 			end
 
 			-- Index, R, G, B, A
@@ -72,7 +72,7 @@ local function ImageData_Iter<T>(self: ImageData<T>)
 			Index = if Index ~= 0 then Index + 4 else Index
 			
 			if Index > Length then
-				error("[Quack] ImageData iterator tried to go out of bounds")
+				error("[ImageData] Iterator tried to go out of bounds")
 			end
 
 			-- Index, R, G, B, A
