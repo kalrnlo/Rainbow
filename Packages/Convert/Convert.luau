@@ -1,3 +1,6 @@
+local BulkImportService = game:GetService("BulkImportService")
+local EngineAPICloudProcessingService = game:GetService("EngineAPICloudProcessingService")
+local BulkImportService = game:GetService("BulkImportService")
 -- MIT license */
 -- eslint-disable no-mixed-operators */
 --[[
@@ -335,73 +338,53 @@ local function XYZ_RGB(X: number, Y: number, Z: number)
         math.min(math.max(0, NewB), 1) * 255
 end
 
-convert.xyz.lab = function (xyz) {
-	let x = xyz[0];
-	let y = xyz[1];
-	let z = xyz[2];
+local XYZToLabIncrement = 16 / 116
+local XYZToLabPower = 1 / 3
 
-	x /= 95.047;
-	y /= 100;
-	z /= 108.883;
+local function XYZ_LAB(X: number, Y: number, Z: number)
+    local X = X / 95.047
+    local Y = Y / 100
+    local Z = Z / 108.883
 
-	x = x > LAB_FT ? (x ^ (1 / 3)) : (7.787 * x) + (16 / 116);
-	y = y > LAB_FT ? (y ^ (1 / 3)) : (7.787 * y) + (16 / 116);
-	z = z > LAB_FT ? (z ^ (1 / 3)) : (7.787 * z) + (16 / 116);
+    local NewX = if X > LAB_FT then (X ^ XYZToLabPower) else (7.787 * X) + XYZToLabIncrement
+    local NewY = if Y > LAB_FT then (Y ^ XYZToLabPower) else (7.787 * Y) + XYZToLabIncrement
+    local NewZ = if Z > LAB_FT then (Z ^ XYZToLabPower) else (7.787 * Z) + XYZToLabIncrement
 
-	const l = (116 * y) - 16;
-	const a = 500 * (x - y);
-	const b = 200 * (y - z);
+    return (116 * NewY) - 16,
+        500 * (NewX - NewY),
+        200 * (NewY - NewZ)
+end
 
-	return [l, a, b];
-};
+local LABToXYZSubtractor = 16 / 166
+local LABToXYZDivider = 7.787
 
-convert.lab.xyz = function (lab) {
-	const l = lab[0];
-	const a = lab[1];
-	const b = lab[2];
-	let x;
-	let y;
-	let z;
+local function LAB_XYZ(L: number, A: number, B: number)
+    local Y = (L + 16) / 116
+    local X = (A / 500) + Y
+    local Z = (Y - B) / 200
 
-	y = (l + 16) / 116;
-	x = a / 500 + y;
-	z = y - b / 200;
+    local Y2 = Y ^ 3
+    local X2 = X ^ 3
+    local Z2 = Z ^ 3
+    local NewY = if Y2 > LAB_FT then Y2 else (Y - LABToXYZSubtractor) / LABToXYZDivider
+    local NewX = if X2 > LAB_FT then X2 else (X - LABToXYZSubtractor) / LABToXYZDivider
+    local NewZ = if Z2 > LAB_FT then Z2 else (Z - LABToXYZSubtractor) / LABToXYZDivider
 
-	const y2 = y ** 3;
-	const x2 = x ** 3;
-	const z2 = z ** 3;
-	y = y2 > LAB_FT ? y2 : (y - 16 / 116) / 7.787;
-	x = x2 > LAB_FT ? x2 : (x - 16 / 116) / 7.787;
-	z = z2 > LAB_FT ? z2 : (z - 16 / 116) / 7.787;
-
-	-- Illuminant D65 XYZ Tristrimulus Values
+    -- Illuminant D65 XYZ Tristrimulus Values
 	-- https://en.wikipedia.org/wiki/CIE_1931_color_space
-	x *= 95.047;
-	y *= 100;
-	z *= 108.883;
+    return NewX * 95.047, NewY * 100, NewZ * 108.883
+end
 
-	return [x, y, z];
-};
+local LABToLCHDivider = 2 / math.pi
 
-convert.lab.lch = function (lab) {
-	const l = lab[0];
-	const a = lab[1];
-	const b = lab[2];
-	let h;
+local function LAB_LCH(L: number, A: number, B: number)
+    local H = (math.atan2(B, A) * 360) / LABToLCHDivider
+    local C = math.sqrt((A * A) + (B * B))
 
-	const hr = Math.atan2(b, a);
-	h = hr * 360 / 2 / Math.PI;
+    return L, C, if H < 0 then H + 360 else H
+end
 
-	if (h < 0) {
-		h += 360;
-	}
-
-	const c = Math.sqrt(a * a + b * b);
-
-	return [l, c, h];
-};
-
-convert.lch.lab = function (lch) {
+local function LCH_LAB(L: number, C: number, H: number)
 	const l = lch[0];
 	const c = lch[1];
 	const h = lch[2];
@@ -411,11 +394,11 @@ convert.lch.lab = function (lch) {
 	const b = c * Math.sin(hr);
 
 	return [l, a, b];
-};
+end
 
-convert.rgb.ansi16 = function (args, saturation = null) {
+local function RGB_Ansi16(R: number, G: number, B: number, Saturation: number?)
 	const [r, g, b] = args;
-	let value = saturation === null ? convert.rgb.hsv(args)[2] : saturation; // Hsv -> ansi16 optimization
+	let value = saturation === null ? convert.rgb.hsv(args)[2] : saturation; -- Hsv -> ansi16 optimization
 
 	value = Math.round(value / 50);
 
@@ -433,7 +416,14 @@ convert.rgb.ansi16 = function (args, saturation = null) {
 	}
 
 	return ansi;
-};
+end
+
+local function HSV_Ansi16(H: number, S: number, V: number)
+	-- Optimization here; we already know the value and don't need to get
+	-- it converted for us.
+	return RGB_Ansi16(HSV_RGB(H, S, V), V)
+end
+
 
 convert.hsv.ansi16 = function (args) {
 	-- Optimization here; we already know the value and don't need to get
@@ -744,64 +734,64 @@ convert.rgb.gray = function (rgb) {
 
 local Exports = {
 	RGB = {
-		channels = 3, 
-		labels = 'rgb'
+		Channels = 3, 
+		Label = "RGB"
 	},
 	HSL = {
-		channels = 3,
-		labels = 'hsl'
+		Channels = 3,
+		Label = "HSL"
 	},
 	HSV = {
-		channels = 3,
-		labels = 'hsv'
+		Channels = 3,
+		Label = "HSV"
 	},
 	HWB = {
-		channels = 3, 
-		labels = 'hwb'
+		Channels = 3, 
+		Label = "HWB"
 	},
 	CMYK = {
-		channels = 4,
-		labels = 'cmyk'
+		Channels = 4,
+		Label = "CMYK"
 	},
 	XYZ = {
-		channels = 3,
-		labels = 'xyz'
+		Channels = 3,
+		Label = "XYZ"
 	},
-	LAB = {
-		channels = 3,
-		labels = 'lab'
+	Lab = {
+		Channels = 3,
+		Label = "Lab"
 	},
 	LCH = {
-		channels = 3,
-		labels = 'lch'
+		Channels = 3,
+		Label = "LCH"
 	},
 	HEX = {
-		channels = 1,
-		labels = 'hex'
+		Channels = 1,
+		Label = "HEX"
 	},
 	Ansi16 = {
-		channels = 1,
-		labels = 'ansi16'
+		Channels = 1,
+		Label = "Ansi16"
 	},
 	Ansi256 = {
-		channels = 1,
-		labels = 'ansi256'
+		Channels = 1,
+		Label = "Ansi256"
 	},
 	HCG = {
-		channels = 3,
-		labels = {'h', 'c', 'g'}
+		Channels = 3,
+		Labels = {"H", "C", "G"}
 	},
 	Apple = {
-		channels = 3,
-		labels = {'r16', 'g16', 'b16'}
+		Channels = 3,
+		Labels = {"R16", "G16", "B16"}
 	},
 	Gray = {
-		channels = 1,
-		labels = {"gray"}
+		Channels = 1,
+		Label = "Gray"
 	},
-	Color3 = {
-		channels = 3, 
-		labels = "Color3"
+    Color3 = {
+		Channels = 3, 
+		Label = "Color3"
 	}
 };
 
