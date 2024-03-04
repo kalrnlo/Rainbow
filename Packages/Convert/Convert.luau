@@ -384,27 +384,25 @@ local function LAB_LCH(L: number, A: number, B: number)
     return L, C, if H < 0 then H + 360 else H
 end
 
+local Tau = math.pi * 2
+
 local function LCH_LAB(L: number, C: number, H: number)
-	const l = lch[0];
-	const c = lch[1];
-	const h = lch[2];
-
-	const hr = h / 360 * 2 * Math.PI;
-	const a = c * Math.cos(hr);
-	const b = c * Math.sin(hr);
-
-	return [l, a, b];
+	local HR = (H / 360) * Tau
+	return L, C * math.cos(HR), C * math.sin(HR)
 end
 
 local function RGB_Ansi16(R: number, G: number, B: number, Saturation: number?)
-	const [r, g, b] = args;
-	let value = saturation === null ? convert.rgb.hsv(args)[2] : saturation; -- Hsv -> ansi16 optimization
+	local Saturation = math.floor((Saturation or (select(2, RGB_HSV(R, G, B)))) / 50)
 
-	value = Math.round(value / 50);
+	if Saturation == 0 then return 30 end
 
-	if (value === 0) {
-		return 30;
-	}
+	local Ansi = 30
+
+	if math.floor(bit32.lshift((B / 255), 2)) > 0 then
+		Ansi += math.floor(bit32.lshift((B / 255), 2))
+	elseif math.floor(bit32.lshift((G / 255), 1)) > 0 then
+		Ansi += math.floor(bit32.lshift((G / 255), 1))
+	else
 
 	let ansi = 30
 		+ ((Math.round(b / 255) << 2)
@@ -423,13 +421,6 @@ local function HSV_Ansi16(H: number, S: number, V: number)
 	-- it converted for us.
 	return RGB_Ansi16(HSV_RGB(H, S, V), V)
 end
-
-
-convert.hsv.ansi16 = function (args) {
-	-- Optimization here; we already know the value and don't need to get
-	-- it converted for us.
-	return convert.rgb.ansi16(convert.hsv.rgb(args), args[2]);
-};
 
 convert.rgb.ansi256 = function (args) {
 	const r = args[0];
@@ -734,6 +725,7 @@ convert.rgb.gray = function (rgb) {
 
 local Exports = {
 	RGB = {
+		HSV = RGB_HSV,
 		Channels = 3, 
 		Label = "RGB"
 	},
