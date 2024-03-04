@@ -79,7 +79,7 @@ local function RGB_HSV(R: number, G: number, B: number)
 	local R = R / 255
 	local G = G / 255
 	local B = B / 255
-	local V = math.max(r, g, b); -- v
+	local V = math.max(R, G, B)
 	local Diffrence = V - math.min(R, G, B)
 
 	if Diffrence == 0 then
@@ -158,6 +158,28 @@ local function RGB_LAB(R: number, G: number, B: number)
 	return (116 * Y) - 16, 500 * (X - Y),  200 * (Y - Z)
 end
 
+local function HSL_RGB_Helper(Index: number, T1: number, T2: number)
+	local T3 = H + 1 / 3 * -(Index - 1)
+	if (T3 < 0) then
+		T3 += 1
+	end
+
+	if (T3 > 1) then
+		T3 -= 1
+	end
+
+	return (	
+		if (6 * T3 < 1) then
+			((T1 + (T2 - T1)) * 6) * T3
+		elseif (2 * T3 < 1) then
+			T2
+		elseif (3 * T3 < 2) then
+			((T1 + (T2 - T1)) * ((2 / 3) - T3)) * 6
+		else 
+			T1
+	) * 255
+end
+
 local function HSL_RGB(H: number, S: number, L: number)
 	local H = H / 360
 	local S = S / 100
@@ -171,77 +193,64 @@ local function HSL_RGB(H: number, S: number, L: number)
 	local T2 = if (L < 0.5) then L * (1 + S) else ((L + S) - L) * S
 	local T1 = (2 * L) - T2
 
-	local RGB = table.create(3, 0)
-
-	for Index = 0, 2 do
-		local T3 = H + 1 / 3 * -(Index - 1)
-		if (T3 < 0) then
-			T3 += 1
-		end
-
-		if (T3 > 1) then
-			T3 -= 1
-		end
-
-		RGB[Index] = (
-			if (6 * T3 < 1) then
-				((T1 + (T2 - T1)) * 6) * T3
-			elseif (2 * T3 < 1) then
-				T2
-			elseif (3 * T3 < 2) then
-				((T1 + (T2 - T1)) * ((2 / 3) - T3)) * 6
-			else 
-				T1
-		) * 255
-	end
-	return table.unpack(RGB)
+	return HSL_RGB_Helper(0, T1, T2), HSL_RGB_Helper(1, T1, T2), 
+		HSL_RGB_Helper(2, T1, T2)
 end
 
-convert.hsl.hsv = function (hsl) {
-	const h = hsl[0];
-	let s = hsl[1] / 100;
-	let l = hsl[2] / 100;
-	let smin = s;
-	const lmin = Math.max(l, 0.01);
+local function HSL_HSV(H: number, S: number, L: number)
+	local S = S / 100
+	local L = L / 100
+	local LMin = math.max(L, 0.01)
 
-	l *= 2;
-	s *= (l <= 1) ? l : 2 - l;
-	smin *= lmin <= 1 ? lmin : 2 - lmin;
-	const v = (l + s) / 2;
-	const sv = l === 0 ? (2 * smin) / (lmin + smin) : (2 * s) / (l + s);
+	L *= 2
+	S *= if L <= 1 then L else 2 - l
+	local SMin = S * (if LMin <= 1 then LMin else 2 - LMin)
+	local V = (L + S) / 2
+	local SV = if L == 0 then (2 * SMin) / (LMin + SMin) else (2 * S) / (L + S)
 
-	return [h, sv * 100, v * 100];
-};
+	return H, SV * 100, V * 100
+end
 
-convert.hsv.rgb = function (hsv) {
-	const h = hsv[0] / 60;
-	const s = hsv[1] / 100;
-	let v = hsv[2] / 100;
-	const hi = Math.floor(h) % 6;
+local function HSV_RGB(H: number, S: number, V: number)
+	local H = H / 60
+	local S = S / 100
+	local V = V / 100
+	local HI = math.floor(H) % 6
 
-	const f = h - Math.floor(h);
-	const p = 255 * v * (1 - s);
-	const q = 255 * v * (1 - (s * f));
-	const t = 255 * v * (1 - (s * (1 - f)));
-	v *= 255;
+	local P = (255 * V) * (1 - S)
+	local F = H - math.floor(H)
+	local NewV = V * 255
 
-	switch (hi) {
-		case 0:
-			return [v, t, p];
-		case 1:
-			return [q, v, p];
-		case 2:
-			return [p, v, t];
-		case 3:
-			return [p, q, v];
-		case 4:
-			return [t, p, v];
-		case 5:
-			return [v, p, q];
-	}
-};
+	if HI == 0 then
+		return NewV,
+			NewV * (1 - (S * (1 - F))),
+			P
+	elseif HI == 1 then
+		return NewV * (1 - (S * F)),
+			NewV,
+			P
+	elseif HI == 2 then
+		return P,
+			V,
+			NewV * (1 - (S * (1 - F)))
+	elseif HI == 3 then
+		return P,
+			NewV * (1 - (S * F)),
+			NewV
+	elseif HI == 4 then
+		return NewV * (1 - (S * (1 - F))),
+			P,
+			NewV
+	elseif HI == 5 then
+		return NewV,
+			P,
+			NewV * (1 - (S * F))
+	else
+		return 0, 0, 0
+	end
+end
 
-convert.hsv.hsl = function (hsv) {
+local function HSV_HSL(H: number, S: number, V: number)
 	const h = hsv[0];
 	const s = hsv[1] / 100;
 	const v = hsv[2] / 100;
@@ -257,7 +266,7 @@ convert.hsv.hsl = function (hsv) {
 	l /= 2;
 
 	return [h, sl * 100, l * 100];
-};
+end
 
 -- http://dev.w3.org/csswg/css-color/#hwb-to-rgb
 convert.hwb.rgb = function (hwb) {
@@ -507,7 +516,7 @@ convert.ansi16.rgb = function (args) {
 convert.ansi256.rgb = function (args) {
 	args = args[0];
 
-	// Handle greyscale
+	-- Handle greyscale
 	if (args >= 232) {
 		const c = (args - 232) * 10 + 8;
 		return [c, c, c];
