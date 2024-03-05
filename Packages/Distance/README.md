@@ -1,2 +1,0 @@
-## Distance
-Color distance utility
