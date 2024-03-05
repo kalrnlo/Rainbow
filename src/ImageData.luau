@@ -22,69 +22,69 @@ export type ImageData<T> = typeof(setmetatable({} :: {
 	Size: number,
 }, {} :: ImageDataPrototype<T>))
 
-local function ImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, number?, number?, number?)
-	if typeof(self.Pixels) == "table" then
-		if Index < 1 then
-			return nil, nil, nil, nil
-		end
-		local NewIndex = if Index > 1 then Index * 4 else 1
+local function BufferImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, number?, number?, number?)
+	if Index < 0 then
+		return nil, nil, nil, nil
+	end
+	local NewIndex = if Index > 1 then Index * 4 else 0
 
-		return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
-			self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
+	if NewIndex > buffer.len(self.Pixels) then
+		return nil, nil, nil, nil
 	else
-		if Index < 0 then
-			return nil, nil, nil, nil
-		end
-		local NewIndex = if Index > 1 then Index * 4 else 0
-
-		if NewIndex > buffer.len(self.Pixels) then
-			return nil, nil, nil, nil
-		else
-			return buffer.readu8(self.Pixels :: any, Index),
-				buffer.readu8(self.Pixels :: any, Index + 1),
-				buffer.readu8(self.Pixels :: any, Index + 2),
-				buffer.readu8(self.Pixels :: any, Index + 3)
-		end
+		return buffer.readu8(self.Pixels :: any, Index),
+			buffer.readu8(self.Pixels :: any, Index + 1),
+			buffer.readu8(self.Pixels :: any, Index + 2),
+			buffer.readu8(self.Pixels :: any, Index + 3)
 	end
 end
 
-local function ImageData_Iter<T>(self: ImageData<T>)
-	if typeof(self.Pixels) == "table" then
-		local Length = #self.Pixels
-		local Index = 1
+local function TableImageData_Peek<T>(self: ImageData<T>, Index: number): (number?, number?, number?, number?)
+	if Index < 1 then
+		return nil, nil, nil, nil
+	end
+	local NewIndex = if Index > 1 then Index * 4 else 1
 
-		return function()
-			Index = if Index ~= 1 then Index + 4 else Index
+	return self.Pixels[NewIndex], self.Pixels[NewIndex + 1],
+		self.Pixels[NewIndex + 2], self.Pixels[NewIndex + 3]
+end
 
-			if Index > Length then
-				error("[ImageData] Iterator tried to go out of bounds")
-			end
+local function BufferImageData_Iter<T>(self: ImageData<T>)
+	local Length = buffer.len(self.Pixels)
+	local Index = 0
 
-			-- Index, R, G, B, A
-			return Index, self.Pixels[Index], self.Pixels[Index + 1],
-				self.Pixels[Index + 2], self.Pixels[Index + 3]
-		end
-	else
-		local Length = buffer.len(self.Pixels)
-		local Index = 0
-
-		return function()
-			Index = if Index ~= 0 then Index + 4 else Index
+	return function()
+		Index = if Index ~= 0 then Index + 4 else Index
 			
-			if Index > Length then
-				error("[ImageData] Iterator tried to go out of bounds")
-			end
-
-			-- Index, R, G, B, A
-			return Index, buffer.readu8(self.Pixels :: any, Index),
-				buffer.readu8(self.Pixels :: any, Index + 1),
-				buffer.readu8(self.Pixels :: any, Index + 2),
-				buffer.readu8(self.Pixels :: any, Index + 3)
+		if Index > Length then
+			error("[ImageData] Iterator tried to go out of bounds")
 		end
+
+		-- Index, R, G, B, A
+		return Index, buffer.readu8(self.Pixels :: any, Index),
+			buffer.readu8(self.Pixels :: any, Index + 1),
+			buffer.readu8(self.Pixels :: any, Index + 2),
+			buffer.readu8(self.Pixels :: any, Index + 3)
 	end
 end
 
-local function ImageData_Set<T>(
+local function TableImageData_Iter<T>(self: ImageData<T>)
+	local Length = #self.Pixels
+	local Index = 1
+
+	return function()
+		Index = if Index ~= 1 then Index + 4 else Index
+
+		if Index > Length then
+			error("[ImageData] Iterator tried to go out of bounds")
+		end
+
+		-- Index, R, G, B, A
+		return Index, self.Pixels[Index], self.Pixels[Index + 1],
+			self.Pixels[Index + 2], self.Pixels[Index + 3]
+	end
+end
+
+local function BufferImageData_Set<T>(
 	self: ImageData<T>,
 	Index: number,
 	R: number,
@@ -92,39 +92,55 @@ local function ImageData_Set<T>(
 	B: number,
 	A: number?
 )
-	if typeof(self.Pixels) == "table" then
-		if Index < 1 then return end
-		local NewIndex = if Index > 1 then Index * 4 else 1
+	if Index < 0 then return end
+	local NewIndex = if Index > 1 then Index * 4 else 0
 
-		self.Pixels[NewIndex] = R
-		self.Pixels[NewIndex + 1] = G
-		self.Pixels[NewIndex + 2] = B
-		self.Pixels[NewIndex + 3] = A or 0
-	else
-		if Index < 0 then return end
-		local NewIndex = if Index > 1 then Index * 4 else 0
-
-		if NewIndex + 4 <= buffer.len(self.Pixels) then
-			buffer.writeu8(self.Pixels :: any, NewIndex, R)
-			buffer.writeu8(self.Pixels :: any, NewIndex + 1, G)
-			buffer.writeu8(self.Pixels :: any, NewIndex + 2, B)
-			buffer.writeu8(self.Pixels :: any, NewIndex + 3, A)
-		end
+	if NewIndex + 4 <= buffer.len(self.Pixels) then
+		buffer.writeu8(self.Pixels :: any, NewIndex, R)
+		buffer.writeu8(self.Pixels :: any, NewIndex + 1, G)
+		buffer.writeu8(self.Pixels :: any, NewIndex + 2, B)
+		buffer.writeu8(self.Pixels :: any, NewIndex + 3, A)
 	end
+end
+
+local function TableImageData_Set<T>(
+	self: ImageData<T>,
+	Index: number,
+	R: number,
+	G: number,
+	B: number,
+	A: number?
+)
+	if Index < 1 then return end
+	local NewIndex = if Index > 1 then Index * 4 else 1
+
+	self.Pixels[NewIndex] = R
+	self.Pixels[NewIndex + 1] = G
+	self.Pixels[NewIndex + 2] = B
+	self.Pixels[NewIndex + 3] = A or 0
 end
 
 local function ImageData_Len<T>(self: ImageData<T>)
 	return self.Size
 end
 
-local ImageDataPrototype = {
-	__iter = ImageData_Iter,
+local BufferImageDataPrototype = {
+	__iter = BufferImageData_Iter,
 	__len = ImageData_Len,
-	Iter = ImageData_Iter,
-	Peek = ImageData_Peek,
-	Set = ImageData_Set,
+	Iter = BufferImageData_Iter,
+	Peek = BufferImageData_Peek,
+	Set = BufferImageData_Set,
 }
-ImageDataPrototype.__index = ImageDataPrototype
+BufferImageDataPrototype.__index = BufferImageDataPrototype
+
+local TableImageDataPrototype = {
+	__iter = TableImageData_Iter,
+	__len = ImageData_Len,
+	Iter = TableImageData_Iter,
+	Peek = TableImageData_Peek,
+	Set = TableImageData_Set,
+}
+TableImageDataPrototype.__index = TableImageDataPrototype
 
 local function FromArray(Pixels: {number}, Width: number, Height: number, Copy: boolean?): ImageData<{number}>
 	local CopyPixels = if Copy == nil then true else Copy
@@ -135,7 +151,7 @@ local function FromArray(Pixels: {number}, Width: number, Height: number, Copy: 
 		Pixels = NewPixels,
 		Height = Height,
 		Width = Width,
-	}, ImageDataPrototype) :: any
+	}, TableImageDataPrototype) :: any
 end
 
 local function FromBuffer(Pixels: buffer, Width: number, Height: number, Copy: boolean?): ImageData<buffer>
@@ -152,10 +168,10 @@ local function FromBuffer(Pixels: buffer, Width: number, Height: number, Copy: b
 		Height = Height,
 		Width = Width,
 		Size = Length / 4,
-	}, ImageDataPrototype) :: any
+	}, BufferImageDataPrototype) :: any
 end
 
-local function FromEditableImage(EditableImage: EditableImage): ImageData<{number}>
+local function FromEditableImage(EditableImage: EditableImage, UseArray: boolean?)
 	local Pixels = EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
 
 	return setmetatable({
@@ -163,11 +179,12 @@ local function FromEditableImage(EditableImage: EditableImage): ImageData<{numbe
 		Height = EditableImage.Size.Y,
 		Width = EditableImage.Size.X,
 		Size = #Pixels / 4,
-	}, ImageDataPrototype) :: any
+	}, if UseArray then TableImageDataPrototype else BufferImageDataPrototype) :: any
 end
 
 local Exports = table.freeze({
-	fromEditableImage = FromEditableImage,
+	fromEditableImage = FromEditableImage :: ((EditableImage: EditableImage, UseArray: boolean?): ImageData<buffer>) &
+		((EditableImage: EditableImage, UseArray: true): ImageData<{number}>),
 	fromBuffer = FromBuffer,
 	fromArray = FromArray,
 })
