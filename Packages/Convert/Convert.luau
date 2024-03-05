@@ -464,7 +464,7 @@ local function RGB_HCG(R: number, G: number, B: number)
 	) / 6
 
 	return (Hue % 1) * 360, Chroma * 100, 
-		(if Chroma < 1 then Min / (1 - Chroma) else 0) * 100
+		if Chroma < 1 then (Min / (1 - Chroma)) * 100 else 0
 end
 
 local function HSL_HCG(H: number, S: number, L: number)
@@ -808,4 +808,4 @@ local Exports = table.freeze({
 	})
 })
 
-return Exports 
+return Exports
