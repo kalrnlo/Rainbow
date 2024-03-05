@@ -9,6 +9,7 @@
 -- 27/02/2024
 
 local Distance = require(script.Parent.Distance)
+local Convert = require(script.Parent.Convert)
 local Future = require(script.Parent.Future)
 
 export type DitheringMethod = ArrayDitheringMethod | "ErrorDiffusionRiemersma" | "NearestColor"
@@ -124,9 +125,39 @@ local BT709 = {
 	},
 }
 
---------------------------------------------------------------------------------
--- Palette
---------------------------------------------------------------------------------
+local function BufferReadRGBA(Buffer: buffer, Index: number?)
+	local NewIndex = Index or 0
+	return buffer.readu8(Buffer, NewIndex),
+		buffer.readu8(Buffer, NewIndex + 1),
+		buffer.readu8(Buffer, NewIndex + 2),
+		buffer.readu8(Buffer, NewIndex + 3)
+end
+
+local function BufferReadUint32(Buffer: buffer)
+	return buffer.readu32(Buffer, 4)
+end
+
+local function BufferWriteColor(
+	Buffer: buffer,
+	R: number,
+	G: number,
+	B: number,
+	A: number?
+)
+	local A = A or 0
+	buffer.writeu8(Buffer, 0, R)
+	buffer.writeu8(Buffer, 1, G)
+	buffer.writeu8(Buffer, 2, B)
+	buffer.writeu8(Buffer, 3, A)
+	buffer.writeu32(Buffer, 4, RGBAToUint32(R, G, B, A))
+	return Buffer
+end
+
+local function RGBAToUint32(R: number, G: number, B: number, A: number?)
+	return bit32.rshift(
+		bit32.bor(bit32.lshift(A or 0, 24), bit32.lshift(B, 16), bit32.lshift(G, 8), R), 0
+	)
+end
 
 local HueGroups = 10
 
@@ -135,8 +166,9 @@ local function GetNearestIndex(
 	R: number,
 	G: number,
 	B: number,
-	A: number
+	A: number?
 )
+	local A = A or 0
 	local Uint32 = RGBAToUint32(R, G, B, A)
 	local CacheIndex = Palette.Uint32Indexs[Uint32]
 	if CacheIndex then 
@@ -180,14 +212,14 @@ local function GetNearestColor(
 	return select(2, GetNearestIndex(Palette, R, G, B, A))
 end
 
-local function Palette_Remove(self: Palette, ValueOrIndex: any, G: number?, B: number?, A: number?)
-	local Index = if ValueOrIndex and (not G and B and A) then
-			ValueOrIndex :: number
+local function Palette_Remove(self: Palette, ROrIndex: number, G: number?, B: number?, A: number?)
+	local Index = if ROrIndex and (not G and B and A) then
+			ROrIndex :: number
 		else
-			GetNearestIndex(self, GetRGBA(ValueOrIndex, G, B, A))
+			GetNearestIndex(self, ROrIndex, G, B, A)
 
 	if Index > 0 then
-		self.Uint32Indexs[BufferReadUint32(self.Colors[ValueOrIndex])] = nil
+		self.Uint32Indexs[BufferReadUint32(self.Colors[Index])] = nil
 		local ColorBuffer = table.remove(self.Colors, Index)
 
 		if ColorBuffer then
@@ -196,15 +228,15 @@ local function Palette_Remove(self: Palette, ValueOrIndex: any, G: number?, B: n
 	end
 end
 
-local function Palette_Contains(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	local Uint32 = RGBAToUint32(GetRGBA(Value, G, B, A))
+local function Palette_Contains(self: Palette, R: number, G: number, B: number, A: number?)
+	local Uint32 = RGBAToUint32(R, G, B, A)
 
-	for _, ColorBuffer in self.Colors do
+	for Index, ColorBuffer in self.Colors do
 		if BufferReadUint32(ColorBuffer) == Uint32 then 
-			return true
+			return true, Index
 		end
 	end
-	return false
+	return false, 0
 end
 
 local function Palette_Peek(self: Palette, Index: number?): (number?, number?, number?, number?)
@@ -217,14 +249,12 @@ local function Palette_Peek(self: Palette, Index: number?): (number?, number?, n
 	end
 end
 
-local function Palette_Nearest(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	local NewR, NewG, NewB, NewA, RGBAType = GetRGBA(Value, G, B, A)
-	return FormatRGBA(RGBAType, GetNearestColor(self, NewR, NewG, NewB, NewA))
+local function Palette_Nearest(self: Palette, R: number, G: number, B: number, A: number?)
+	return GetNearestColor(self, R, G, B, A)
 end
 
-local function Palette_Add(self: Palette, Value: any, G: number?, B: number?, A: number?)
-	local NewR, NewG, NewB, NewA = GetRGBA(Value, G, B, A)
-	table.insert(self.Colors, WriteOrCreateColorBuffer(NewR, NewG, NewB, NewA))
+local function Palette_Add(self: Palette, R: number, G: number, B: number, A: number?)
+	table.insert(self.Colors, WriteOrCreateColorBuffer(R, G, B, A or 0))
 	self.Size += 1
 end
 
@@ -255,8 +285,8 @@ local function Palette_Sort(self: Palette)
 	table.sort(self.Colors, function(A, B)
 		local AR, AG, AB, AA = BufferReadRGBA(A)
 		local BR, BG, BB, BA = BufferReadRGBA(B)
-		local AH, AS, AL = RGBToHSL(AR, AG, AB)
-		local BH, BS, BL = RGBToHSL(BR, BG, BB)
+		local AH, AS, AL = Convert.RGB.HSL(AR, AG, AB)
+		local BH, BS, BL = Convert.RGB.HSL(BR, BG, BB)
 	
 		-- sort all grays + whites together
 		local HueA = if AR == AG and AG == AB then 0 else 1 + HueGroup(AH, HueGroups)

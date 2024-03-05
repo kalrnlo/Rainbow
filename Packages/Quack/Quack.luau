@@ -218,9 +218,9 @@ local function GetRGBALuminosity(R: number, G: number, B: number, A: number?)
 	end
 end
 
-local function RGBAToUint32(R: number, G: number, B: number, A: number)
+local function RGBAToUint32(R: number, G: number, B: number, A: number?)
 	return bit32.rshift(
-		bit32.bor(bit32.lshift(A, 24), bit32.lshift(B, 16), bit32.lshift(G, 8), R), 0
+		bit32.bor(bit32.lshift(A or 0, 24), bit32.lshift(B, 16), bit32.lshift(G, 8), R), 0
 	)
 end
 
