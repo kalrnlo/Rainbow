@@ -172,10 +172,8 @@ local function FromBuffer(Pixels: buffer, Width: number, Height: number, Copy: b
 end
 
 local function FromEditableImage(EditableImage: EditableImage, UseArray: boolean?)
-	local Pixels = EditableImage:ReadPixels(Vector2.new(), EditableImage.Size)
-
 	return setmetatable({
-		Pixels = Data:ReadPixels(Vector2.new(), Data.Size),
+		Pixels = EditableImage:ReadPixels(Vector2.new(), EditableImage.Size),
 		Height = EditableImage.Size.Y,
 		Width = EditableImage.Size.X,
 		Size = #Pixels / 4,
